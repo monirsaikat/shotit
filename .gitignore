@@ -1,9 +1,61 @@
+# Build output
 bin/
 obj/
-.vs/
-*.user
 artifacts/
 publish/
 releases/
+*.binlog
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userprefs
+*.DotSettings.user
+launchSettings.json
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+.nuget/
+
+# Tests and coverage
 TestResults/
 *.received.*
+*.trx
+*.coverage
+*.coveragexml
+coverage*.xml
+coverage*.json
+BenchmarkDotNet.Artifacts/
+
+# Installer output
+installer/Output/
+*.msi
+*.msix
+*.wixobj
+*.wixpdb
+
+# Secrets and local config
+.env
+.env.*
+*.pfx
+*.snk
+appsettings.*.local.json
+secrets.json
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# OS / editor noise
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+*.swp
+*~
+*.tmp
+*.log

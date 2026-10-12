@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>$(ShotItWindowsTfm)</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>ShotIt</AssemblyName>
+    <RootNamespace>ShotIt.App</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\shotit.ico</ApplicationIcon>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <AssemblyTitle>ShotIt</AssemblyTitle>
+    <Description>ShotIt screenshot and annotation tool</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Sinks.File" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ShotIt.Core\ShotIt.Core.csproj" />
+    <ProjectReference Include="..\ShotIt.Native\ShotIt.Native.csproj" />
+    <ProjectReference Include="..\ShotIt.Capture\ShotIt.Capture.csproj" />
+    <ProjectReference Include="..\ShotIt.Rendering\ShotIt.Rendering.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Assets\shotit.ico" />
+  </ItemGroup>
+</Project>
