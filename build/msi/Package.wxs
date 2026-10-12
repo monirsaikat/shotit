@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!--
+    Silent install:      msiexec /i ShotIt-x64.msi /qn
+    With restrictions:   msiexec /i ShotIt-x64.msi /qn DISABLE_UPLOAD=1 DISABLE_HISTORY=1 START_WITH_WINDOWS=0
+    Uninstall:           msiexec /x ShotIt-x64.msi /qn
+
+    The MSI copy never updates itself (administrators deploy new versions), so DISABLE_UPDATES defaults to 1.
+    The same restrictions can be applied later through Group Policy with the ADMX template in build/msi/policy.
+  -->
+  <Package Name="ShotIt"
+           Manufacturer="ShotIt"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="7C0B3B7E-5E0B-4C55-9C2B-6C1F6D5E8A41"
+           Scope="perMachine"
+           Compressed="yes"
+           InstallerVersion="500">
+
+    <SummaryInformation Description="ShotIt screenshot and annotation tool" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of ShotIt is already installed." Schedule="afterInstallInitialize" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="AppIcon.ico" SourceFile="..\..\src\ShotIt.App\Assets\shotit.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+
+    <Launch Condition="Installed OR (VersionNT64 AND WindowsBuild &gt;= 19041)"
+            Message="ShotIt needs 64-bit Windows 10 version 2004 (build 19041) or later." />
+
+    <!-- Public properties an administrator can set on the msiexec command line. -->
+    <Property Id="DISABLE_UPDATES" Value="1" Secure="yes" />
+    <Property Id="DISABLE_UPLOAD" Value="0" Secure="yes" />
+    <Property Id="DISABLE_HISTORY" Value="0" Secure="yes" />
+    <Property Id="START_WITH_WINDOWS" Value="1" Secure="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="ShotIt" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(var.PublishDir)\**">
+        <Exclude Files="$(var.PublishDir)\ShotIt.exe" />
+      </Files>
+      <!-- Declared by hand so the Start menu shortcut can be attached to it. -->
+      <Component Id="MainExecutable" Guid="B8F0D0E4-9F0B-4B43-8F0C-0F3B7B1E6A10">
+        <File Id="ShotItExe" Source="$(var.PublishDir)\ShotIt.exe" KeyPath="yes">
+          <Shortcut Id="ShotItShortcut" Directory="ProgramMenuFolder" Name="ShotIt" Description="Screenshots, annotation and sharing"
+                    WorkingDirectory="INSTALLFOLDER" Icon="AppIcon.ico" Advertise="yes" />
+        </File>
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="Integration">
+      <Component Id="StartWithWindows" Directory="INSTALLFOLDER" Guid="5E2C3D0B-2B8C-4E0E-A0F2-3E6C0B9A7D21" Condition="START_WITH_WINDOWS = &quot;1&quot;">
+        <RegistryValue Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="ShotIt" Type="string"
+                       Value="&quot;[INSTALLFOLDER]ShotIt.exe&quot; --silent" KeyPath="yes" />
+      </Component>
+
+      <Component Id="PolicyUpdates" Directory="INSTALLFOLDER" Guid="0B6A9A53-1C0F-4D0E-9C56-7C2E1F0A4B32" Condition="DISABLE_UPDATES = &quot;1&quot;">
+        <RegistryValue Root="HKLM" Key="Software\Policies\ShotIt" Name="DisableUpdates" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="PolicyUpload" Directory="INSTALLFOLDER" Guid="C4D7E1A2-6B3F-4A8D-8E19-2D5F7A6C9B43" Condition="DISABLE_UPLOAD = &quot;1&quot;">
+        <RegistryValue Root="HKLM" Key="Software\Policies\ShotIt" Name="DisableUpload" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="PolicyHistory" Directory="INSTALLFOLDER" Guid="9A1F2B3C-4D5E-4F60-8172-93A4B5C6D754" Condition="DISABLE_HISTORY = &quot;1&quot;">
+        <RegistryValue Root="HKLM" Key="Software\Policies\ShotIt" Name="DisableHistory" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Ask a running ShotIt to close itself before its files are replaced or removed. Failure is harmless. -->
+    <CustomAction Id="AskAppToQuit" Directory="INSTALLFOLDER" ExeCommand="&quot;[INSTALLFOLDER]ShotIt.exe&quot; --quit"
+                  Execute="immediate" Return="ignore" />
+    <InstallExecuteSequence>
+      <Custom Action="AskAppToQuit" Before="InstallValidate" Condition="Installed" />
+    </InstallExecuteSequence>
+
+    <Feature Id="Main" Title="ShotIt" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentGroupRef Id="Integration" />
+    </Feature>
+  </Package>
+</Wix>

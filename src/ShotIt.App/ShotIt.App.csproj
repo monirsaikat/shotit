@@ -17,6 +17,14 @@
     <UpdateFeedUrl Condition="'$(UpdateFeedUrl)' == ''"></UpdateFeedUrl>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Precompiling these large, rarely used libraries doubles their size and does not help start-up. -->
+    <PublishReadyToRunExclude Include="Microsoft.Windows.SDK.NET.dll" />
+    <PublishReadyToRunExclude Include="BouncyCastle.Cryptography.dll" />
+    <PublishReadyToRunExclude Include="Renci.SshNet.dll" />
+    <PublishReadyToRunExclude Include="FluentFTP.dll" />
+    <PublishReadyToRunExclude Include="zxing.dll" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Serilog" />
     <PackageReference Include="Serilog.Sinks.File" />
     <PackageReference Include="Velopack" />

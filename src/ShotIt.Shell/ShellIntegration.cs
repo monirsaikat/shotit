@@ -50,6 +50,9 @@ public enum StartupState
 
     /// <summary>Registered for a different copy of ShotIt (the program was moved).</summary>
     PointsElsewhere,
+
+    /// <summary>Started for every user of this computer by the MSI installer; only an administrator can change it.</summary>
+    OnForAllUsers,
 }
 
 /// <summary>
@@ -67,14 +70,17 @@ public sealed class ShellIntegration
     private const string SendToFileName = "ShotIt.lnk";
 
     private readonly RegistryKey _root;
+    private readonly RegistryKey? _machineRoot;
     private readonly string _executable;
     private readonly string _sendToFolder;
 
     /// <param name="executablePath">Full path of ShotIt.exe.</param>
     /// <param name="root">Registry root; tests pass a scratch key instead of HKEY_CURRENT_USER.</param>
     /// <param name="sendToFolder">The SendTo folder; tests pass a temporary folder.</param>
-    public ShellIntegration(string executablePath, RegistryKey? root = null, string? sendToFolder = null)
+    /// <param name="machineRoot">Machine-wide registry root (read only). Defaults to HKEY_LOCAL_MACHINE, or to nothing when <paramref name="root"/> is a test key.</param>
+    public ShellIntegration(string executablePath, RegistryKey? root = null, string? sendToFolder = null, RegistryKey? machineRoot = null)
     {
+        _machineRoot = machineRoot ?? (root is null ? Registry.LocalMachine : null);
         if (string.IsNullOrWhiteSpace(executablePath)) throw new ArgumentException("An executable path is required.", nameof(executablePath));
         _executable = Path.GetFullPath(executablePath);
         _root = root ?? Registry.CurrentUser;
@@ -92,6 +98,12 @@ public sealed class ShellIntegration
     {
         try
         {
+            using (var machineRun = _machineRoot?.OpenSubKey(RunPath))
+            {
+                if (machineRun?.GetValue(ValueName) is string machineCommand && machineCommand.Contains(_executable, StringComparison.OrdinalIgnoreCase))
+                    return StartupState.OnForAllUsers;
+            }
+
             using var run = _root.OpenSubKey(RunPath);
             if (run?.GetValue(ValueName) is not string command || command.Length == 0) return StartupState.Off;
             if (!command.Contains(_executable, StringComparison.OrdinalIgnoreCase)) return StartupState.PointsElsewhere;

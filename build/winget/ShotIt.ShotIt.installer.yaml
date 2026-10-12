@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+PackageIdentifier: ShotIt.ShotIt
+PackageVersion: {{VERSION}}
+MinimumOSVersion: 10.0.19041.0
+InstallerType: exe
+Scope: user
+InstallModes:
+- interactive
+- silent
+InstallerSwitches:
+  Silent: --silent
+  SilentWithProgress: --silent
+UpgradeBehavior: install
+Installers:
+{{INSTALLERS}}
+ManifestType: installer
+ManifestVersion: 1.6.0

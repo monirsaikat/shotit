@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: ShotIt.ShotIt
+PackageVersion: {{VERSION}}
+PackageLocale: en-US
+Publisher: {{PUBLISHER}}
+PackageName: ShotIt
+License: Proprietary
+ShortDescription: Fast screenshots with annotation, text recognition, pinning and sharing.
+Description: |-
+  ShotIt captures a region, window or screen and lets you annotate it on the spot: arrows, text,
+  highlighter, blur, numbered steps and more. It can read text and QR codes from a capture, pin
+  captures on screen, keep a searchable history and upload to a destination you choose.
+  No account, no telemetry, no advertising.
+Tags:
+- screenshot
+- screen-capture
+- annotation
+- ocr
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

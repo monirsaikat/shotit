@@ -595,6 +595,27 @@ internal static class SelfTest
         app.Shell.RemoveAll();
         report.Check(app.Shell.GetStartupState() == StartupState.Off && !app.Shell.IsContextMenuInstalled() && !app.Shell.IsSendToInstalled(), "Uninstall cleanup left registrations behind");
 
+        // --- pins are remembered between runs only when asked to ---
+        var pinned = app.Pins.Pin(Page(["Pinned"]), new PixelPoint(Monitors.GetTopology().Primary.WorkArea.X + 120, Monitors.GetTopology().Primary.WorkArea.Y + 90), 1.5);
+        await Settle(400);
+        var pinnedAt = pinned.ImagePosition;
+        report.Check(app.Pins.SaveSession() == 0 && !Directory.Exists(app.Paths.PinsDirectory), "Pins were stored although the option is off");
+        app.Settings.General.RestorePins = true;
+        report.Check(app.Pins.SaveSession() == 1, "The pin was not stored");
+        app.Pins.CloseAll();
+        report.Check(app.Pins.RestoreSession() == 1 && app.Pins.Count == 1, "The pin was not restored");
+        await Settle(400);
+        var restoredPin = app.Pins.All[0];
+        report.Check(restoredPin.ImagePosition == pinnedAt, $"The pin came back at {restoredPin.ImagePosition}, expected {pinnedAt}");
+        report.Check(Math.Abs(restoredPin.Zoom - 1.5) < 0.001 && restoredPin.PinnedImage.Size == new PixelSize(640, 240), "The pin lost its zoom or its picture");
+        File.WriteAllText(Path.Combine(app.Paths.PinsDirectory, "pins.json"), "[{\"File\":\"..\\\\settings.json\",\"X\":0,\"Y\":0,\"Zoom\":1},{\"File\":\"missing.png\",\"X\":0,\"Y\":0,\"Zoom\":1}]");
+        app.Pins.CloseAll();
+        report.Check(app.Pins.RestoreSession() == 0, "A pin entry pointing outside the pins folder was accepted");
+        File.WriteAllText(Path.Combine(app.Paths.PinsDirectory, "pins.json"), "not json");
+        report.Check(app.Pins.RestoreSession() == 0, "A damaged pin list was not ignored");
+        app.Settings.General.RestorePins = false;
+        app.Pins.SaveSession();
+
         string secret = app.Secrets.Protect("s3cret");
         report.Check(secret != "s3cret" && app.Secrets.Unprotect(secret) == "s3cret", "Secrets are not protected");
         report.Values["updates"] = app.Updates.Describe();

@@ -80,6 +80,7 @@ public partial class App : Application
         if (command.Command != AppCommand.None) Execute(command);
         else if (!services.Settings.General.OnboardingDone && !command.Silent) ShowOnboarding();
 
+        Dispatcher.BeginInvoke(() => services.Pins.RestoreSession(), DispatcherPriority.ApplicationIdle);
         Dispatcher.BeginInvoke(services.Controller.Prewarm, DispatcherPriority.ApplicationIdle);
         services.RunRetentionSoon();
         StartUpdateChecks(services);
@@ -108,7 +109,11 @@ public partial class App : Application
                 Logging.WriteCrashReport(paths, ex, "AppDomain");
             }
         };
-        SessionEnding += (_, _) => services.SaveSettingsNow();
+        SessionEnding += (_, _) =>
+        {
+            services.SaveSettingsNow();
+            services.Pins.SaveSession();
+        };
 
         services.ApplyTheme();
         return services;

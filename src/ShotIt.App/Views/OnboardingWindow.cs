@@ -45,8 +45,10 @@ public sealed class OnboardingWindow : Window
 
         p.Children.Add(new Border { Height = 1, Background = new SolidColorBrush(Color.FromArgb(0x33, 0x80, 0x80, 0x80)), Margin = new Thickness(0, 14, 0, 10) });
 
-        _startup = new CheckBox { Content = "Start ShotIt when I sign in to Windows", IsChecked = true, Margin = new Thickness(0, 4, 0, 4) };
-        p.Children.Add(_startup);
+        // The MSI may already start ShotIt for every user; then there is nothing to ask.
+        bool startsForEveryone = app.Shell.GetStartupState() == StartupState.OnForAllUsers;
+        _startup = new CheckBox { Content = "Start ShotIt when I sign in to Windows", IsChecked = !startsForEveryone, Margin = new Thickness(0, 4, 0, 4) };
+        if (!startsForEveryone) p.Children.Add(_startup);
 
         bool usesPrintScreen = new[] { keys.Region, keys.FullScreen, keys.ActiveWindow, keys.Window, keys.LastRegion }.Any(k => k.VirtualKey == Hotkey.VkPrintScreen);
         if (usesPrintScreen && app.PrintScreen.IsSnippingToolBound())

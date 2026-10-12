@@ -145,23 +145,27 @@ public sealed class SettingsWindow : Window
             {
                 StartupState.DisabledByUser => "Windows has start-up turned off for ShotIt (Task Manager › Startup apps). Tick the box again to turn it back on.",
                 StartupState.PointsElsewhere => "Start-up is registered for a different copy of ShotIt. Tick the box to use this copy.",
+                StartupState.OnForAllUsers => "ShotIt starts for everyone on this computer. That was set by the installer and only an administrator can change it.",
                 _ => "ShotIt waits in the notification area and uses almost no resources until you capture.",
             };
         }
 
-        bool startup = _app.Shell.GetStartupState() == StartupState.On;
-        p.Children.Add(Ui.Check("Start ShotIt when I sign in to Windows", startup, on =>
+        var startupState = _app.Shell.GetStartupState();
+        var startupBox = Ui.Check("Start ShotIt when I sign in to Windows", startupState is StartupState.On or StartupState.OnForAllUsers, on =>
         {
             if (!_app.Shell.SetStartup(on)) _app.Notifier.Warn("Could not change start-up", "Windows refused the change. A policy may be blocking it.");
             _s.General.StartWithWindows = _app.Shell.GetStartupState() == StartupState.On;
             DescribeStartup();
             Changed();
-        }));
+        });
+        startupBox.IsEnabled = startupState != StartupState.OnForAllUsers;
+        p.Children.Add(startupBox);
         DescribeStartup();
         p.Children.Add(startupNote);
 
         p.Children.Add(Ui.Check("Show a notification after saving, uploading and similar actions", _s.General.ShowNotifications, v => { _s.General.ShowNotifications = v; Changed(); }));
         p.Children.Add(Ui.Check("Play a sound after a capture", _s.General.PlaySound, v => { _s.General.PlaySound = v; Changed(); }));
+        p.Children.Add(Ui.Check("Bring pinned images back after ShotIt restarts", _s.General.RestorePins, v => { _s.General.RestorePins = v; Changed(); }));
 
         p.Children.Add(Ui.SubHeading("Text recognition"));
         var languages = new List<(string, string)> { (string.Empty, "Automatic (my Windows languages)") };

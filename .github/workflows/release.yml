@@ -1,0 +1,55 @@
+name: Release
+
+# Push a tag such as v1.2.0 to build every installer and attach it to a draft GitHub release.
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build installers
+        shell: pwsh
+        env:
+          # Optional. Arguments for "signtool sign", for example:
+          #   /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f cert.pfx /p <password>
+          # Without this secret the release is built unsigned and Windows SmartScreen will warn users.
+          SIGN_PARAMS: ${{ secrets.SIGN_PARAMS }}
+        run: |
+          $version = '${{ github.ref_name }}'.TrimStart('v')
+          $repo = 'https://github.com/${{ github.repository }}'
+          $arguments = @{
+            Version       = $version
+            UpdateFeedUrl = $repo
+            PackageUrl    = "$repo/releases/download/${{ github.ref_name }}"
+          }
+          if ($env:SIGN_PARAMS) { $arguments.SignParams = $env:SIGN_PARAMS }
+          ./build/package.ps1 @arguments
+
+      - name: Create draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $files = Get-ChildItem artifacts/release -File | ForEach-Object FullName
+          # The update feed files must sit beside the installers for the in-app updater to find them.
+          $files += Get-ChildItem artifacts/release/feed -File | ForEach-Object FullName
+          gh release create '${{ github.ref_name }}' $files --draft --title 'ShotIt ${{ github.ref_name }}' --generate-notes
+
+      - name: Keep the winget manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: winget-manifest
+          path: artifacts/release/winget
+          if-no-files-found: ignore

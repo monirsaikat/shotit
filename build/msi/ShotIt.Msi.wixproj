@@ -1,0 +1,24 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+  <!--
+    Per-machine MSI for IT departments. Built by build/package.ps1:
+      dotnet build build/msi/ShotIt.Msi.wixproj -c Release -p:Platform=x64 -p:ProductVersion=1.0.0 -p:PublishDir=<published app folder>
+    WiX 5 is used on purpose: later WiX versions require accepting a paid maintenance-fee licence.
+  -->
+  <PropertyGroup>
+    <OutputName>ShotIt</OutputName>
+    <OutputType>Package</OutputType>
+    <Platforms>x64;arm64</Platforms>
+    <Platform Condition="'$(Platform)' == '' Or '$(Platform)' == 'AnyCPU'">x64</Platform>
+    <InstallerPlatform>$(Platform)</InstallerPlatform>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">0.1.0</ProductVersion>
+    <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\publish\win-$(Platform)</PublishDir>
+    <DefineConstants>ProductVersion=$(ProductVersion);PublishDir=$(PublishDir)</DefineConstants>
+    <!-- ICE60 complains that unversioned data files have no language; that is expected for a .NET app folder. -->
+    <SuppressIces>ICE60</SuppressIces>
+    <OutputPath>bin\$(Platform)\$(Configuration)\</OutputPath>
+    <IntermediateOutputPath>obj\$(Platform)\$(Configuration)\</IntermediateOutputPath>
+  </PropertyGroup>
+  <Target Name="CheckPublishDir" BeforeTargets="Build">
+    <Error Condition="!Exists('$(PublishDir)\ShotIt.exe')" Text="No published app in '$(PublishDir)'. Run dotnet publish first, or use build/package.ps1." />
+  </Target>
+</Project>

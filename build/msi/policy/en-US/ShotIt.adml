@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<policyDefinitionResources xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                           revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <displayName>ShotIt</displayName>
+  <description>Policies for the ShotIt screenshot tool</description>
+  <resources>
+    <stringTable>
+      <string id="ShotIt">ShotIt</string>
+
+      <string id="DisableUpload">Turn off uploading</string>
+      <string id="DisableUpload_Help">When enabled, ShotIt cannot send a screenshot over the network: Upload, the upload test in Settings and Search image on the web are all blocked, and the Upload page in Settings says so.
+
+When disabled or not configured, users can set up an upload destination and upload screenshots they choose to upload. ShotIt never uploads anything on its own.</string>
+
+      <string id="DisableHistory">Turn off history</string>
+      <string id="DisableHistory_Help">When enabled, ShotIt keeps no record of captures: no history entries, no internal copies and no stored text. Copying and saving still work.
+
+When disabled or not configured, users choose in Settings what is kept. History is always stored only in the user's own profile on this computer.</string>
+
+      <string id="DisableUpdates">Turn off automatic updates</string>
+      <string id="DisableUpdates_Help">When enabled, ShotIt never checks for, downloads or installs updates. Use this when new versions are deployed centrally.
+
+Copies installed with the MSI package have this turned on by default.</string>
+
+      <string id="UpdateFeedUrl">Update address</string>
+      <string id="UpdateFeedUrl_Help">Replaces the built-in address ShotIt downloads updates from, for organisations that host approved releases internally. The address must start with https://.
+
+This has no effect when automatic updates are turned off.</string>
+    </stringTable>
+    <presentationTable>
+      <presentation id="UpdateFeedUrl">
+        <textBox refId="UpdateFeedUrl">
+          <label>Address (https://…)</label>
+        </textBox>
+      </presentation>
+    </presentationTable>
+  </resources>
+</policyDefinitionResources>

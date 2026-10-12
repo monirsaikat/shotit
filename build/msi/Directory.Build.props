@@ -1,0 +1,3 @@
+<Project>
+  <!-- The installer project does not share the C# build settings of the repository. -->
+</Project>

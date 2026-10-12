@@ -1,3 +1,5 @@
+using ShotIt.Core.Settings;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -30,10 +32,11 @@ public sealed class PinWindow : Window
     private double _zoom = 1;
     private bool _clickThrough;
 
-    public PinWindow(PinManager manager, PixelBuffer image, PixelPoint? topLeftPx)
+    public PinWindow(PinManager manager, PixelBuffer image, PixelPoint? topLeftPx, double zoom = 1)
     {
         _manager = manager;
         _image = image;
+        _zoom = Math.Clamp(zoom, 0.1, 8);
         Title = "ShotIt pin";
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
@@ -84,6 +87,20 @@ public sealed class PinWindow : Window
     }
 
     public PixelBuffer PinnedImage => _image;
+
+    public double Zoom => _zoom;
+
+    /// <summary>Where the top-left pixel of the image sits on the virtual screen, or null before the window exists.</summary>
+    public PixelPoint? ImagePosition
+    {
+        get
+        {
+            if (_handle == 0) return null;
+            var bounds = WindowList.GetBounds(_handle);
+            int inset = (int)Math.Round((Frame + 1) * WindowInterop.GetDpi(_handle) / 96.0);
+            return new PixelPoint(bounds.X + inset, bounds.Y + inset);
+        }
+    }
 
     /// <summary>At zoom 1 the pin shows one image pixel per device pixel, exactly as it was on screen.</summary>
     private void ApplyZoom(int dpi)
@@ -223,11 +240,13 @@ public sealed class PinManager
 
     public int Count => _pins.Count;
 
-    public PinWindow Pin(PixelBuffer image, PixelPoint? topLeftPx = null)
+    public IReadOnlyList<PinWindow> All => _pins;
+
+    public PinWindow Pin(PixelBuffer image, PixelPoint? topLeftPx = null, double zoom = 1)
     {
         ArgumentNullException.ThrowIfNull(image);
         if (_hidden) ToggleAll();
-        var window = new PinWindow(this, image, topLeftPx);
+        var window = new PinWindow(this, image, topLeftPx, zoom);
         _pins.Add(window);
         window.Show();
         return window;
@@ -261,6 +280,81 @@ public sealed class PinManager
     public void OnDisplayChanged()
     {
         foreach (var pin in _pins) pin.EnsureOnScreen();
+    }
+
+    // ------------------------------------------------------------------ remembering pins between runs
+
+    private const int MaxRememberedPins = 40;
+
+    private sealed record SavedPin(string File, int X, int Y, double Zoom);
+
+    /// <summary>
+    /// Writes the open pins to disk so <see cref="RestoreSession"/> can bring them back, or removes
+    /// what was stored when the user has the option off. Never throws: this runs while shutting down.
+    /// </summary>
+    public int SaveSession()
+    {
+        string folder = _app.Paths.PinsDirectory;
+        try
+        {
+            if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+            if (!_app.Settings.General.RestorePins || _pins.Count == 0) return 0;
+
+            Directory.CreateDirectory(folder);
+            var saved = new List<SavedPin>();
+            foreach (var pin in _pins.Take(MaxRememberedPins))
+            {
+                if (pin.ImagePosition is not { } position) continue;
+                string file = saved.Count.ToString(System.Globalization.CultureInfo.InvariantCulture) + ".png";
+                File.WriteAllBytes(Path.Combine(folder, file), ImageCodec.Encode(pin.PinnedImage, ImageFormat.Png));
+                saved.Add(new SavedPin(file, position.X, position.Y, pin.Zoom));
+            }
+
+            File.WriteAllText(Path.Combine(folder, "pins.json"), System.Text.Json.JsonSerializer.Serialize(saved));
+            return saved.Count;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            _app.Log.Warning(ex, "Pinned images could not be stored for the next start");
+            return 0;
+        }
+    }
+
+    /// <summary>Brings back the pins stored by <see cref="SaveSession"/>. Unreadable entries are skipped.</summary>
+    public int RestoreSession()
+    {
+        string folder = _app.Paths.PinsDirectory;
+        string index = Path.Combine(folder, "pins.json");
+        if (!_app.Settings.General.RestorePins || !File.Exists(index)) return 0;
+        int restored = 0;
+        try
+        {
+            if (new FileInfo(index).Length > 64 * 1024) return 0;
+            var saved = System.Text.Json.JsonSerializer.Deserialize<List<SavedPin>>(File.ReadAllText(index)) ?? [];
+            foreach (var entry in saved.Take(MaxRememberedPins))
+            {
+                // Only plain file names inside the pins folder are accepted.
+                if (entry is null || string.IsNullOrEmpty(entry.File) || Path.GetFileName(entry.File) != entry.File) continue;
+                string path = Path.Combine(folder, entry.File);
+                if (!File.Exists(path)) continue;
+                try
+                {
+                    var pin = Pin(ImageCodec.DecodeFile(path), new PixelPoint(entry.X, entry.Y), double.IsFinite(entry.Zoom) ? entry.Zoom : 1);
+                    pin.EnsureOnScreen();
+                    restored++;
+                }
+                catch (Exception ex) when (ex is NotSupportedException or IOException or UnauthorizedAccessException or ArgumentException)
+                {
+                    _app.Log.Information("A remembered pin could not be restored: {Message}", ex.Message);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or NotSupportedException)
+        {
+            _app.Log.Warning(ex, "Remembered pins could not be read");
+        }
+
+        return restored;
     }
 
     internal void SaveAs(PinWindow pin)

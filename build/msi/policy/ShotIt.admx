@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Group Policy template for ShotIt.
+  Copy ShotIt.admx to %SystemRoot%\PolicyDefinitions (or the domain's central store)
+  and en-US\ShotIt.adml to the en-US folder beside it.
+-->
+<policyDefinitions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <policyNamespaces>
+    <target prefix="shotit" namespace="ShotIt.Policies" />
+    <using prefix="windows" namespace="Microsoft.Policies.Windows" />
+  </policyNamespaces>
+  <resources minRequiredRevision="1.0" />
+  <categories>
+    <category name="ShotIt" displayName="$(string.ShotIt)" />
+  </categories>
+  <policies>
+    <policy name="DisableUpload" class="Both" displayName="$(string.DisableUpload)" explainText="$(string.DisableUpload_Help)"
+            key="Software\Policies\ShotIt" valueName="DisableUpload">
+      <parentCategory ref="ShotIt" />
+      <supportedOn ref="windows:SUPPORTED_Windows_10_0" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="DisableHistory" class="Both" displayName="$(string.DisableHistory)" explainText="$(string.DisableHistory_Help)"
+            key="Software\Policies\ShotIt" valueName="DisableHistory">
+      <parentCategory ref="ShotIt" />
+      <supportedOn ref="windows:SUPPORTED_Windows_10_0" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="DisableUpdates" class="Both" displayName="$(string.DisableUpdates)" explainText="$(string.DisableUpdates_Help)"
+            key="Software\Policies\ShotIt" valueName="DisableUpdates">
+      <parentCategory ref="ShotIt" />
+      <supportedOn ref="windows:SUPPORTED_Windows_10_0" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="UpdateFeedUrl" class="Both" displayName="$(string.UpdateFeedUrl)" explainText="$(string.UpdateFeedUrl_Help)"
+            key="Software\Policies\ShotIt" presentation="$(presentation.UpdateFeedUrl)">
+      <parentCategory ref="ShotIt" />
+      <supportedOn ref="windows:SUPPORTED_Windows_10_0" />
+      <elements>
+        <text id="UpdateFeedUrl" valueName="UpdateFeedUrl" required="true" maxLength="1024" />
+      </elements>
+    </policy>
+  </policies>
+</policyDefinitions>

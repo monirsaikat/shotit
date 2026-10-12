@@ -264,3 +264,46 @@ public class SecretProtectorTests
         Assert.NotEqual(protector.Protect("same"), protector.Protect("same"));
     }
 }
+
+
+public class MachineStartupTests
+{
+    private const string Run = @"Software\Microsoft\Windows\CurrentVersion\Run";
+
+    private static ShellIntegration Create(Sandbox user, Sandbox machine, string command)
+    {
+        using (var run = machine.Root.CreateSubKey(Run)) run.SetValue("ShotIt", command);
+        return new ShellIntegration(user.Exe, user.Root, user.SendTo, machine.Root);
+    }
+
+    [Fact]
+    public void AMachineWideEntryForThisCopyIsReportedAsOnForAllUsers()
+    {
+        using var user = new Sandbox();
+        using var machine = new Sandbox();
+        var shell = Create(user, machine, "\"" + user.Exe + "\" --silent");
+        Assert.Equal(StartupState.OnForAllUsers, shell.GetStartupState());
+    }
+
+    [Fact]
+    public void AMachineWideEntryForAnotherCopyIsIgnored()
+    {
+        using var user = new Sandbox();
+        using var machine = new Sandbox();
+        var shell = Create(user, machine, "\"C:\\Other\\ShotIt.exe\" --silent");
+        Assert.Equal(StartupState.Off, shell.GetStartupState());
+        shell.SetStartup(true);
+        Assert.Equal(StartupState.On, shell.GetStartupState());
+    }
+
+    [Fact]
+    public void RemoveAllNeverTouchesTheMachineEntry()
+    {
+        using var user = new Sandbox();
+        using var machine = new Sandbox();
+        var shell = Create(user, machine, "\"" + user.Exe + "\" --silent");
+        shell.RemoveAll();
+        using var after = machine.Root.OpenSubKey(Run)!;
+        Assert.NotNull(after.GetValue("ShotIt"));
+    }
+}

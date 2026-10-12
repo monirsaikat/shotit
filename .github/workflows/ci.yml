@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore ShotIt.slnx
+
+      - name: Build (warnings are errors)
+        run: dotnet build ShotIt.slnx -c Release --no-restore --nologo
+
+      - name: Unit and integration tests
+        run: dotnet test ShotIt.slnx -c Release --no-build --nologo --logger "trx;LogFileName=results.trx"
+
+      # The application drives itself; each scenario exits non-zero on failure and leaves pictures behind.
+      - name: Self-tests
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem src/ShotIt.App/bin/Release -Recurse -Filter ShotIt.exe | Select-Object -First 1
+          $failed = @()
+          foreach ($scenario in 'editor', 'windows', 'policy', 'overlay') {
+            $out = Join-Path $env:RUNNER_TEMP "selftest/$scenario"
+            $process = Start-Process $exe.FullName -ArgumentList '--selftest', $scenario, "`"$out`"" -Wait -PassThru
+            Write-Host "$scenario exited with $($process.ExitCode)"
+            if (Test-Path "$out/result.json") { Get-Content "$out/result.json" }
+            if ($process.ExitCode -ne 0) { $failed += $scenario }
+          }
+          if ($failed) { throw "Self-tests failed: $($failed -join ', ')" }
+
+      - name: Upload test results and self-test pictures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: |
+            **/TestResults/*.trx
+            ${{ runner.temp }}/selftest/**/*.png
+            ${{ runner.temp }}/selftest/**/result.json
+          if-no-files-found: ignore

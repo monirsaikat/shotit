@@ -52,6 +52,9 @@ public sealed class AppPaths
     /// <summary>Editable projects (base image plus annotations) for history entries, named by entry id.</summary>
     public string ProjectsDirectory => Path.Combine(DataRoot, "projects");
 
+    /// <summary>Pinned images remembered between runs, when the user turned that on.</summary>
+    public string PinsDirectory => Path.Combine(DataRoot, "pins");
+
     /// <summary>Default folder for files the user saves explicitly.</summary>
     public static string DefaultSaveFolder =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "ShotIt");

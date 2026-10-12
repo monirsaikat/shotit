@@ -272,6 +272,7 @@ public sealed class AppServices : IDisposable
         _retentionTimer.Stop();
         SaveSettingsNow();
         Controller.Shutdown();
+        Pins.SaveSession();
         Pins.CloseAll();
         Hotkeys.Dispose();
         MessageWindow.Dispose();
