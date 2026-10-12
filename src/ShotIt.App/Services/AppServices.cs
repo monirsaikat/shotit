@@ -42,8 +42,11 @@ public sealed class AppServices : IDisposable
             typeof(AppServices).Assembly.GetName().Version, paths.DataRoot, paths.IsPortable, loaded.Outcome);
 
         History = new HistoryRepository(paths.HistoryDatabase);
-        CaptureService = new ScreenCaptureService(log: message => Log.Information("{Message}", message));
-        Output = new OutputService(Settings, paths, History, Log);
+        CaptureService = new ScreenCaptureService(CaptureBackends.CreateGpuBackends(), message => Log.Information("{Message}", message));
+        // The self-test reads policies from its scratch key, so a managed machine cannot change its outcome.
+        Policies = shellRoot is null ? AppPolicies.Read() : AppPolicies.Read(shellRoot, shellRoot);
+        if (Policies.Any) Log.Information("Administrator policies in effect: {Policies}", Policies);
+        Output = new OutputService(Settings, paths, History, Log) { HistoryDisabledByPolicy = Policies.DisableHistory };
         Notifier = new Notifier(Settings);
         MessageWindow = new MessageWindow();
         Hotkeys = new HotkeyManager(MessageWindow);
@@ -53,7 +56,7 @@ public sealed class AppServices : IDisposable
         Secrets = new DpapiSecretProtector();
         Shell = new ShellIntegration(Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "ShotIt.exe"), shellRoot, sendToFolder);
         PrintScreen = new PrintScreenBinding(shellRoot);
-        Updates = new UpdateService(Settings, Log);
+        Updates = new UpdateService(Settings, Log, Policies);
         Features = new FeatureActions(this);
         CaptureService.Preference = Settings.Capture.Backend;
 
@@ -83,6 +86,7 @@ public sealed class AppServices : IDisposable
     public ShellIntegration Shell { get; }
     public PrintScreenBinding PrintScreen { get; }
     public UpdateService Updates { get; }
+    public AppPolicies Policies { get; }
     public FeatureActions Features { get; }
 
     /// <summary>Raised after settings were changed and saved, so open windows can refresh.</summary>

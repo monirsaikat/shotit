@@ -61,6 +61,12 @@ public sealed class FeatureActions
     public async Task<UploadResult?> UploadCoreAsync(CaptureResult result, Window? owner, string purpose)
     {
         var settings = _app.Settings.Upload;
+        if (_app.Policies.DisableUpload)
+        {
+            _app.Notifier.Warn("Uploads are turned off", "Your organisation does not allow uploading screenshots from this computer.");
+            return null;
+        }
+
         IUploader uploader;
         try
         {

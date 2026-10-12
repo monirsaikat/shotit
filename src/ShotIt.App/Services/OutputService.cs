@@ -67,7 +67,11 @@ public sealed class OutputService
 
     public event Action? HistoryChanged;
 
+    /// <summary>Set when an administrator policy forbids keeping a history.</summary>
+    public bool HistoryDisabledByPolicy { get; init; }
+
     private bool IsExcludedFromHistory(CaptureResult result) =>
+        HistoryDisabledByPolicy ||
         _settings.History.Mode == HistoryMode.Off ||
         Wildcard.MatchesAny(result.SourceTitle, _settings.History.ExcludedTitlePatterns);
 

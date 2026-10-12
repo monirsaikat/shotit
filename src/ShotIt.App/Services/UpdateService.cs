@@ -1,6 +1,7 @@
 using System.Reflection;
 using Serilog;
 using ShotIt.Core.Settings;
+using ShotIt.Shell;
 using Velopack;
 using Velopack.Sources;
 
@@ -19,11 +20,18 @@ public sealed class UpdateService
     private UpdateInfo? _ready;
     private bool _busy;
 
-    public UpdateService(AppSettings settings, ILogger log)
+    public UpdateService(AppSettings settings, ILogger log, AppPolicies? policies = null)
     {
         _settings = settings;
         _log = log;
-        string feed = ResolveFeed(settings);
+        policies ??= AppPolicies.None;
+        if (policies.DisableUpdates)
+        {
+            _unavailableReason = "Updates are managed by your organisation.";
+            return;
+        }
+
+        string feed = policies.UpdateFeedUrl.Length > 0 ? policies.UpdateFeedUrl : ResolveFeed(settings);
         if (feed.Length == 0)
         {
             _unavailableReason = "This build has no update address, so it does not update itself.";

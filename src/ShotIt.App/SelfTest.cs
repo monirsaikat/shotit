@@ -60,6 +60,14 @@ internal static class SelfTest
             // Shell integration is exercised against a scratch registry key and folder, never the real ones.
             Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(ScratchKey, throwOnMissingSubKey: false);
             var scratch = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(ScratchKey, writable: true);
+            if (scenario == "policy")
+            {
+                using var policy = scratch.CreateSubKey(AppPolicies.KeyPath, writable: true);
+                policy.SetValue("DisableUpload", 1, Microsoft.Win32.RegistryValueKind.DWord);
+                policy.SetValue("DisableHistory", 1, Microsoft.Win32.RegistryValueKind.DWord);
+                policy.SetValue("DisableUpdates", 1, Microsoft.Win32.RegistryValueKind.DWord);
+            }
+
             services = app.Initialize(new AppPaths(data), scratch, Path.Combine(output, "sendto"));
             services.Settings.General.ShowNotifications = false;
             services.Settings.Output.SaveFolder = Path.Combine(output, "saved");
@@ -81,6 +89,7 @@ internal static class SelfTest
                     case "editor": await Editor(services, report, output); break;
                     case "windows": await Windows(services, report, output); break;
                     case "capture": await RealCapture(services, report); break;
+                    case "policy": await Policy(services, report, output); break;
                     default: report.Failures.Add("Unknown scenario: " + scenario); break;
                 }
             }
@@ -594,6 +603,52 @@ internal static class SelfTest
         app.Settings.General.ShowNotifications = false;
     }
 
+    /// <summary>With the administrator policies set, nothing may be uploaded, recorded in history or updated.</summary>
+    private static async Task Policy(AppServices app, Report report, string output)
+    {
+        app.Features.Confirm = (_, _, _) => true;
+        report.Check(app.Policies is { DisableUpload: true, DisableHistory: true, DisableUpdates: true }, "Policies were not read: " + app.Policies);
+
+        var image = new PixelBuffer(120, 80);
+        image.Fill(new ColorRgba(0x22, 0x66, 0xCC));
+        var result = new CaptureResult(DocState.FromImage(image), "notepad", "Policy test");
+
+        // History: copying and saving still work, but leave no record.
+        report.Check(app.Output.EnsureInLibrary(result) is null, "A capture entered history despite the policy");
+        string? path = app.Output.Save(result, out string? error);
+        report.Check(path is not null && File.Exists(path), "Saving stopped working under the history policy: " + error);
+        report.Check(app.History.Count() == 0, "A saved capture was recorded in history despite the policy");
+        report.Check(!Directory.Exists(app.Paths.LibraryDirectory) || Directory.GetFiles(app.Paths.LibraryDirectory, "*", SearchOption.AllDirectories).Length == 0, "An internal copy was written despite the policy");
+
+        // Upload: blocked even with a working destination configured.
+        string uploads = Path.Combine(output, "uploads");
+        app.Settings.Upload.Provider = UploadProvider.LocalFolder;
+        app.Settings.Upload.LocalFolder = uploads;
+        foreach (var action in new[] { OverlayAction.Upload, OverlayAction.SearchImage })
+        {
+            app.Notifier.Reset();
+            app.Actions.Run(result, action);
+            for (int i = 0; i < 30 && app.Notifier.Last is null; i++) await Task.Delay(100);
+            report.Check(app.Notifier.Last?.Title == "Uploads are turned off", $"{action} was not blocked by policy: {app.Notifier.Last}");
+        }
+
+        report.Check(!Directory.Exists(uploads) || Directory.GetFiles(uploads).Length == 0, "A file was uploaded despite the policy");
+
+        var settings = WindowsHost.OpenSettings(app, "Upload");
+        await Settle(600);
+        SaveWindowPicture(settings, Path.Combine(output, "settings-upload-policy.png"));
+        var (ok, message) = await settings.TestUploadAsync();
+        report.Check(!ok && message.Contains("organisation", StringComparison.Ordinal), "The test upload button ignores the policy: " + message);
+        report.Check(!Directory.Exists(uploads) || Directory.GetFiles(uploads).Length == 0, "The test upload wrote a file despite the policy");
+        settings.Close();
+
+        // Updates.
+        report.Check(!app.Updates.IsAvailable && !app.Updates.AutoCheckEnabled, "Updates are still enabled under the policy");
+        report.Check(app.Updates.Describe().Contains("organisation", StringComparison.Ordinal), "The About page does not explain why updates are off: " + app.Updates.Describe());
+        string status = await app.Updates.CheckAndDownloadAsync(userInitiated: true);
+        report.Check(status.Contains("organisation", StringComparison.Ordinal), "A manual update check ignores the policy: " + status);
+    }
+
     private static async Task RealCapture(AppServices app, Report report)
     {
         // Timing of the real capture path; the pixels themselves are never written anywhere.
@@ -609,6 +664,35 @@ internal static class SelfTest
         }
 
         report.Values["captureMs"] = times.Select(t => Math.Round(t, 1)).ToArray();
+
+        // Each GPU backend must agree with GDI on what the desktop looks like (allowing for a clock tick or a blinking caret).
+        foreach (var preference in new[] { CaptureBackendPreference.DesktopDuplication, CaptureBackendPreference.WindowsGraphicsCapture })
+        {
+            app.CaptureService.Preference = CaptureBackendPreference.Gdi;
+            var reference = app.CaptureService.CaptureAll(includeCursor: false);
+            app.CaptureService.Preference = preference;
+            var watch = Stopwatch.StartNew();
+            var frame = app.CaptureService.CaptureAll(includeCursor: false);
+            watch.Stop();
+            string name = preference.ToString();
+            report.Values[name + ".backend"] = frame.Backend;
+            report.Values[name + ".ms"] = Math.Round(watch.Elapsed.TotalMilliseconds, 1);
+            report.Check(frame.Image.Size == reference.Image.Size, name + " returned a frame of the wrong size");
+            if (frame.Image.Size != reference.Image.Size) continue;
+            long close = 0, total = 0;
+            byte[] a = reference.Image.Data, b = frame.Image.Data;
+            for (int i = 0; i + 2 < a.Length; i += 4 * 7)
+            {
+                total++;
+                if (Math.Abs(a[i] - b[i]) <= 10 && Math.Abs(a[i + 1] - b[i + 1]) <= 10 && Math.Abs(a[i + 2] - b[i + 2]) <= 10) close++;
+            }
+
+            double ratio = (double)close / total;
+            report.Values[name + ".matchesGdi"] = Math.Round(ratio, 4);
+            report.Check(ratio > 0.97, $"{name} (via {frame.Backend}) differs from GDI: only {ratio:P1} of pixels match");
+        }
+
+        app.CaptureService.Preference = CaptureBackendPreference.Auto;
         report.Values["workingSetMb"] = Math.Round(Process.GetCurrentProcess().WorkingSet64 / 1048576.0, 1);
     }
 }

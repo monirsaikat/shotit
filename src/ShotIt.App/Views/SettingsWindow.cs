@@ -371,6 +371,7 @@ public sealed class SettingsWindow : Window
     private void BuildHistory(StackPanel p)
     {
         var h = _s.History;
+        if (_app.Policies.DisableHistory) p.Children.Add(Ui.Hint("History is turned off by your organisation. Captures are not recorded, whatever is chosen below."));
         p.Children.Add(Ui.Row("Keep in history", Ui.Combo(
             [(HistoryMode.All, "Every capture"), (HistoryMode.SavedOnly, "Only captures I save"), (HistoryMode.Off, "Nothing")],
             h.Mode, v => { h.Mode = v; Changed(); }),
@@ -408,6 +409,12 @@ public sealed class SettingsWindow : Window
     private void BuildUpload(StackPanel p)
     {
         var u = _s.Upload;
+        if (_app.Policies.DisableUpload)
+        {
+            p.Children.Add(Ui.Hint("Uploads are turned off by your organisation. Nothing on this page can send a screenshot anywhere."));
+            return;
+        }
+
         p.Children.Add(Ui.Hint("ShotIt never uploads anything by itself. An upload happens only when you choose Upload, and it goes only to the destination you set up here."));
         var details = new StackPanel();
         p.Children.Add(Ui.Row("Upload to", Ui.Combo(
@@ -511,6 +518,7 @@ public sealed class SettingsWindow : Window
     /// <summary>Uploads a tiny generated picture with the current settings and reports the outcome in words.</summary>
     internal async Task<(bool Ok, string Message)> TestUploadAsync()
     {
+        if (_app.Policies.DisableUpload) return (false, "Uploads are turned off by your organisation.");
         try
         {
             var uploader = UploaderFactory.Create(_s.Upload, _app.Secrets);
