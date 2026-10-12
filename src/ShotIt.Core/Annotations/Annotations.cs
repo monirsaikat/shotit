@@ -108,7 +108,8 @@ public sealed record MeasureAnnotation : SegmentAnnotation
         get
         {
             double a = Math.Atan2(-(End.Y - Start.Y), End.X - Start.X) * 180 / Math.PI;
-            return a < 0 ? a + 360 : a;
+            if (a < 0) a += 360;
+            return a is 0 or >= 360 ? 0 : a; // also normalises negative zero
         }
     }
 

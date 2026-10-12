@@ -34,3 +34,4 @@ dotnet_diagnostic.CA1711.severity = none
 dotnet_diagnostic.CA1720.severity = none
 dotnet_diagnostic.CA1308.severity = none
 dotnet_diagnostic.CA2007.severity = none   # ConfigureAwait: this is an application, not a library
+dotnet_diagnostic.CA1822.severity = none   # 'can be static' is style, not correctness
