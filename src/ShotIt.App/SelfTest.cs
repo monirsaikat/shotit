@@ -56,9 +56,9 @@ internal static class SelfTest
         try
         {
             string data = Path.Combine(output, "data");
-            if (Directory.Exists(data)) Directory.Delete(data, recursive: true);
-            string saved = Path.Combine(output, "saved");
-            if (Directory.Exists(saved)) Directory.Delete(saved, recursive: true);
+            // Start from nothing, so a folder left by an earlier run cannot change the outcome.
+            foreach (string stale in new[] { data, Path.Combine(output, "saved"), Path.Combine(output, "uploads"), Path.Combine(output, "sendto") })
+                if (Directory.Exists(stale)) Directory.Delete(stale, recursive: true);
             // Shell integration is exercised against a scratch registry key and folder, never the real ones.
             Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(ScratchKey, throwOnMissingSubKey: false);
             var scratch = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(ScratchKey, writable: true);
