@@ -2,12 +2,14 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using ShotIt.App.Infrastructure;
 using ShotIt.App.Overlay;
 using ShotIt.App.Services;
+using ShotIt.App.Views;
 using ShotIt.Capture;
 using ShotIt.Core.Annotations;
 using ShotIt.Core.Editing;
@@ -16,6 +18,7 @@ using ShotIt.Core.Imaging;
 using ShotIt.Core.Settings;
 using ShotIt.Native;
 using ShotIt.Rendering;
+using ShotIt.Shell;
 
 namespace ShotIt.App;
 
@@ -40,6 +43,8 @@ internal static class SelfTest
         }
     }
 
+    private const string ScratchKey = @"Software\ShotIt.SelfTest";
+
     public static void Run(App app, AppCommandLine command)
     {
         string scenario = command.Argument ?? "overlay";
@@ -52,7 +57,10 @@ internal static class SelfTest
         {
             string data = Path.Combine(output, "data");
             if (Directory.Exists(data)) Directory.Delete(data, recursive: true);
-            services = app.Initialize(new AppPaths(data));
+            // Shell integration is exercised against a scratch registry key and folder, never the real ones.
+            Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(ScratchKey, throwOnMissingSubKey: false);
+            var scratch = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(ScratchKey, writable: true);
+            services = app.Initialize(new AppPaths(data), scratch, Path.Combine(output, "sendto"));
             services.Settings.General.ShowNotifications = false;
             services.Settings.Output.SaveFolder = Path.Combine(output, "saved");
         }
@@ -90,6 +98,8 @@ internal static class SelfTest
         report.Passed = report.Failures.Count == 0;
         File.WriteAllText(Path.Combine(output, "result.json"), JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
         app.Services?.CloseAllWindows();
+        try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(ScratchKey, throwOnMissingSubKey: false); }
+        catch (Exception) { }
         app.Shutdown(report.Passed ? 0 : 1);
     }
 
@@ -121,8 +131,16 @@ internal static class SelfTest
 
     private static void SavePng(PixelBuffer image, string path) => File.WriteAllBytes(path, ImageCodec.Encode(image, ImageFormat.Png));
 
+    /// <summary>Saves what the window really looks like (frame, theme and all) by asking Windows to render it.</summary>
     private static void SaveWindowPicture(Window window, string path)
     {
+        nint hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+        if (hwnd != 0 && GdiScreen.PrintWindow(hwnd) is { } picture)
+        {
+            SavePng(picture, path);
+            return;
+        }
+
         if (window.Content is not FrameworkElement root || root.ActualWidth < 1 || root.ActualHeight < 1) return;
         var dpi = VisualTreeHelper.GetDpi(window);
         var target = new RenderTargetBitmap((int)Math.Ceiling(root.ActualWidth * dpi.DpiScaleX), (int)Math.Ceiling(root.ActualHeight * dpi.DpiScaleY), dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
@@ -345,16 +363,235 @@ internal static class SelfTest
 
     private static async Task Windows(AppServices app, Report report, string output)
     {
-        WindowsHost.OpenSettings(app);
-        WindowsHost.OpenHistory(app);
-        await Settle(1200);
-        int index = 0;
-        foreach (var window in app.OpenWindows.ToArray())
+        app.Features.Confirm = (_, _, _) => true;
+
+        // --- seed history: a plain capture, an annotated one, and one saved to the user folder ---
+        PixelBuffer Page(string[] lines)
         {
-            SaveWindowPicture(window, Path.Combine(output, $"window-{index++}-{window.GetType().Name}.png"));
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen())
+            {
+                dc.DrawRectangle(Brushes.White, null, new Rect(0, 0, 640, 240));
+                double y = 24;
+                foreach (string line in lines)
+                {
+                    dc.DrawText(TextLayout.Create(line, "Segoe UI", 22, false, false, Brushes.Black), new Point(24, y));
+                    y += 40;
+                }
+            }
+
+            var target = new RenderTargetBitmap(640, 240, 96, 96, PixelFormats.Pbgra32);
+            target.Render(visual);
+            return target.ToPixelBuffer();
         }
 
+        var plain = new CaptureResult(DocState.FromImage(Page(["Invoice number 48213", "Thank you for your order"])), "winword", "Invoice March");
+        var annotated = new CaptureResult(
+            DocState.FromImage(Page(["Annotated capture"])).Add(new ArrowAnnotation { Start = new(40, 150), End = new(300, 200) }).Add(new BlurAnnotation { Rect = new(350, 120, 200, 80) }),
+            "chrome", "Release notes");
+        var saved = new CaptureResult(DocState.FromImage(Page(["Saved capture"])), "explorer", "Holiday photos");
+        report.Check(app.Output.EnsureInLibrary(plain) is not null, "Plain capture was not added to history");
+        await Task.Delay(1100);
+        report.Check(app.Output.EnsureInLibrary(annotated) is not null, "Annotated capture was not added to history");
+        await Task.Delay(1100);
+        report.Check(app.Output.Save(saved) is not null, "Saving a capture failed");
+        report.Check(app.History.Count() == 3, $"Expected 3 history entries, found {app.History.Count()}");
+        report.Check(File.Exists(app.Output.ProjectPath(annotated.HistoryId!.Value)), "No editable project was stored for the annotated capture");
+        report.Check(!File.Exists(app.Output.ProjectPath(plain.HistoryId!.Value)), "A project was stored for a capture without annotations");
+
+        // --- settings: every section must build and render ---
+        var settings = WindowsHost.OpenSettings(app);
+        await Settle(700);
+        foreach (string section in SettingsWindow.Sections)
+        {
+            settings.Select(section);
+            await Settle(250);
+            report.Check(settings.CurrentSection == section, "Settings did not switch to " + section);
+            SaveWindowPicture(settings, Path.Combine(output, "settings-" + section.ToLowerInvariant() + ".png"));
+        }
+
+        report.Check(ReferenceEquals(WindowsHost.OpenSettings(app, "Upload"), settings), "A second settings window was opened");
+        report.Check(settings.CurrentSection == "Upload", "Opening settings at a section did not select it");
+
+        // The upload test button path, against a local folder.
+        string uploads = Path.Combine(output, "uploads");
+        app.Settings.Upload.Provider = UploadProvider.LocalFolder;
+        app.Settings.Upload.LocalFolder = uploads;
+        var (testOk, testMessage) = await settings.TestUploadAsync();
+        report.Check(testOk, "Test upload failed: " + testMessage);
+        app.Settings.Upload.Provider = UploadProvider.None;
+        var (noneOk, noneMessage) = await settings.TestUploadAsync();
+        report.Check(!noneOk && noneMessage.Length > 0, "Test upload without a destination did not explain itself");
+        settings.Close();
+
+        // --- hotkey recorder rules ---
+        report.Check(HotkeyBox.Interpret(Key.A, HotkeyModifiers.None, out _, out _) is null, "A bare letter was accepted as a hotkey");
+        report.Check(HotkeyBox.Interpret(Key.A, HotkeyModifiers.Shift, out _, out _) is null, "Shift+letter was accepted as a hotkey");
+        report.Check(HotkeyBox.Interpret(Key.A, HotkeyModifiers.Ctrl | HotkeyModifiers.Shift, out _, out _) == new Hotkey(HotkeyModifiers.Ctrl | HotkeyModifiers.Shift, 0x41), "Ctrl+Shift+A was not recorded");
+        report.Check(HotkeyBox.Interpret(Key.Snapshot, HotkeyModifiers.None, out _, out _) == new Hotkey(HotkeyModifiers.None, Hotkey.VkPrintScreen), "Print Screen alone was not recorded");
+        report.Check(HotkeyBox.Interpret(Key.F9, HotkeyModifiers.None, out _, out _) is not null, "F9 alone was not recorded");
+        HotkeyBox.Interpret(Key.Back, HotkeyModifiers.None, out bool clear, out _);
+        HotkeyBox.Interpret(Key.Escape, HotkeyModifiers.None, out _, out bool cancel);
+        report.Check(clear && cancel, "Backspace/Esc are not treated as clear/cancel");
+        report.Check(HotkeyBox.Interpret(Key.LeftCtrl, HotkeyModifiers.Ctrl, out _, out _) is null, "A modifier alone was recorded");
+
+        // --- history window ---
+        var history = WindowsHost.OpenHistory(app);
+        await Settle(700);
+        SaveWindowPicture(history, Path.Combine(output, "history.png"));
+        report.Check(history.ShownItems.Count == 3, $"History shows {history.ShownItems.Count} items, expected 3");
+        report.Check(history.ShownItems.Count > 0 && history.ShownItems[0].Id == saved.HistoryId, "History is not newest first");
+        history.SearchText = "release";
+        report.Check(history.ShownItems.Count == 1 && history.ShownItems[0].Id == annotated.HistoryId, "Searching by window title did not find the capture");
+        history.SearchText = "no-such-thing-%_";
+        report.Check(history.ShownItems.Count == 0, "A search with no matches still shows items");
+        history.SearchText = string.Empty;
+
+        // Re-opening the annotated capture gives its annotations back as objects.
+        var reopened = app.Output.OpenHistoryItem(app.History.Get(annotated.HistoryId!.Value)!, out string? openError);
+        report.Check(reopened is not null && reopened.Document.Items.Count == 2, "Annotations were not restored from history: " + openError);
+        report.Check(reopened?.Document.Items[0] is ArrowAnnotation, "The restored annotation has the wrong type");
+        report.Check(reopened?.LibraryPath is not null && reopened.SavedPath is null, "A library capture was treated as a user file");
+        var reopenedSaved = app.Output.OpenHistoryItem(app.History.Get(saved.HistoryId!.Value)!, out _);
+        report.Check(reopenedSaved?.SavedPath == saved.SavedPath, "A saved capture lost its file path");
+
+        // Keep, then clear: the kept one survives and a file the user saved is never deleted.
+        app.Output.SetKeep(app.History.Get(plain.HistoryId!.Value)!, true);
+        string libraryCopy = annotated.LibraryPath!;
+        int cleared = app.Output.ClearHistory();
+        await Settle(600);
+        report.Check(cleared == 2 && app.History.Count() == 1, $"Clear removed {cleared} entries and left {app.History.Count()}");
+        report.Check(!File.Exists(libraryCopy), "The internal copy of a cleared capture was left on disk");
+        report.Check(!File.Exists(app.Output.ProjectPath(annotated.HistoryId!.Value)), "The project of a cleared capture was left on disk");
+        report.Check(File.Exists(saved.SavedPath!), "Clearing history deleted a file the user saved");
+        report.Check(history.ShownItems.Count == 1, "The history window did not refresh after clearing");
+
+        history.ConfirmDelete = _ => true;
+        history.SelectAll();
+        history.DeleteSelected();
+        report.Check(app.History.Count() == 0 && history.ShownItems.Count == 0, "Deleting from the history window did not remove the entry");
+        SaveWindowPicture(history, Path.Combine(output, "history-empty.png"));
+        history.Close();
+
+        // --- text recognition ---
+        var ocrSource = new CaptureResult(DocState.FromImage(Page(["Invoice number 48213", "Thank you for your order"])), "winword", "Invoice March");
+        app.Output.EnsureInLibrary(ocrSource);
+        app.Notifier.Reset();
+        app.Actions.Run(ocrSource, OverlayAction.Ocr);
+        TextResultWindow? ocrWindow = null;
+        for (int i = 0; i < 60 && ocrWindow is null && app.Notifier.Last is null; i++)
+        {
+            await Task.Delay(100);
+            ocrWindow = app.OpenWindows.OfType<TextResultWindow>().FirstOrDefault();
+        }
+
+        if (ocrWindow is not null)
+        {
+            await Settle(300);
+            string flat = new(ocrWindow.CurrentText.Where(char.IsLetterOrDigit).ToArray());
+            report.Check(flat.Contains("48213", StringComparison.Ordinal) && flat.Contains("Thankyou", StringComparison.OrdinalIgnoreCase), "Recognised text is wrong: " + ocrWindow.CurrentText);
+            report.Check(app.History.Get(ocrSource.HistoryId!.Value)!.OcrText.Contains("48213", StringComparison.Ordinal), "Recognised text was not stored in history");
+            report.Check(app.History.Query("48213").Count == 1, "History search does not find recognised text");
+            SaveWindowPicture(ocrWindow, Path.Combine(output, "ocr.png"));
+            ocrWindow.Close();
+            report.Values["ocr"] = "ran";
+        }
+        else
+        {
+            // No recognition language installed on this machine: the user must have been told, not left guessing.
+            report.Check(app.Notifier.Last?.Title == "Text recognition is unavailable", "OCR produced neither a result nor an explanation: " + app.Notifier.Last);
+            report.Values["ocr"] = "unavailable: " + app.Notifier.Last?.Text;
+        }
+
+        // --- QR code ---
+        var matrix = new ZXing.BarcodeWriterGeneric { Format = ZXing.BarcodeFormat.QR_CODE, Options = new ZXing.Common.EncodingOptions { Width = 260, Height = 260, Margin = 4 } }
+            .Encode("https://example.com/shotit-selftest");
+        var qr = new PixelBuffer(matrix.Width, matrix.Height);
+        for (int y = 0; y < matrix.Height; y++)
+            for (int x = 0; x < matrix.Width; x++)
+                qr.SetPixel(x, y, matrix[x, y] ? ColorRgba.Black : ColorRgba.White);
+        app.Actions.Run(new CaptureResult(DocState.FromImage(qr)), OverlayAction.Qr);
+        TextResultWindow? qrWindow = null;
+        for (int i = 0; i < 50 && qrWindow is null; i++)
+        {
+            await Task.Delay(100);
+            qrWindow = app.OpenWindows.OfType<TextResultWindow>().FirstOrDefault();
+        }
+
+        report.Check(qrWindow?.CurrentText == "https://example.com/shotit-selftest", "QR content was not read: " + qrWindow?.CurrentText);
+        if (qrWindow is not null)
+        {
+            await Settle(300);
+            SaveWindowPicture(qrWindow, Path.Combine(output, "qr.png"));
+            qrWindow.Close();
+        }
+
+        var blank = new PixelBuffer(200, 200);
+        blank.Fill(ColorRgba.White);
+        app.Notifier.Reset();
+        app.Actions.Run(new CaptureResult(DocState.FromImage(blank)), OverlayAction.Qr);
+        for (int i = 0; i < 50 && app.Notifier.Last is null; i++) await Task.Delay(100);
+        report.Check(app.Notifier.Last?.Title == "No code found", "Scanning an image without a code did not say so");
+
+        // --- upload ---
+        app.Notifier.Reset();
+        app.Actions.Run(ocrSource, OverlayAction.Upload);
+        for (int i = 0; i < 30 && app.Notifier.Last is null; i++) await Task.Delay(100);
+        report.Check(app.Notifier.Last?.Title == "Upload is not set up", "Uploading without a destination did not explain what to do");
+
+        app.Settings.Upload.Provider = UploadProvider.LocalFolder;
+        app.Settings.Upload.LocalPublicUrlBase = "https://shots.example.com";
+        int before = Directory.Exists(uploads) ? Directory.GetFiles(uploads).Length : 0;
+        app.Notifier.Reset();
+        app.Actions.Run(ocrSource, OverlayAction.Upload);
+        for (int i = 0; i < 50 && app.Notifier.Last is null; i++) await Task.Delay(100);
+        report.Check(app.Notifier.Last?.Title is "Link copied" or "Uploaded", "Upload did not finish: " + app.Notifier.Last);
+        report.Check(Directory.GetFiles(uploads).Length == before + 1, "The uploaded file is not in the destination folder");
+        string url = app.History.Get(ocrSource.HistoryId!.Value)!.UploadUrl;
+        report.Check(url.StartsWith("https://shots.example.com/", StringComparison.Ordinal), "The link was not recorded in history: " + url);
+        report.Check(!url.Contains("Invoice", StringComparison.OrdinalIgnoreCase), "The uploaded name leaks the window title");
+
+        app.Settings.Upload.LocalFolder = "C:\\Windows\\System32\\config\\<bad>|name";
+        app.Notifier.Reset();
+        app.Actions.Run(ocrSource, OverlayAction.Upload);
+        for (int i = 0; i < 50 && app.Notifier.Last is null; i++) await Task.Delay(100);
+        report.Check(app.Notifier.Last?.Title == "Upload failed", "A failed upload was not reported: " + app.Notifier.Last);
+
+        // --- printing layout ---
+        var printed = FeatureActions.BuildPrintVisual(Page(["Print"]), 816, 1056);
+        var printedBounds = VisualTreeHelper.GetDescendantBounds(printed);
+        report.Check(printedBounds.Width is > 600 and <= 720 && printedBounds.Left >= 48 && printedBounds.Top >= 48, "The print layout is not inside the page margins: " + printedBounds);
+
+        // --- shell integration through the application (scratch registry) ---
+        report.Check(app.Shell.GetStartupState() == StartupState.Off, "Start-up was registered before onboarding");
+        report.Check(app.Shell.SetContextMenu(true) && app.Shell.IsContextMenuInstalled(), "Context menu registration failed");
+        report.Check(app.Shell.SetSendTo(true) && app.Shell.IsSendToInstalled(), "Send-to registration failed");
+
+        // --- onboarding ---
+        app.Settings.General.OnboardingDone = false;
+        var onboarding = WindowsHost.OpenOnboarding(app);
+        await Settle(600);
+        SaveWindowPicture(onboarding, Path.Combine(output, "onboarding.png"));
+        onboarding.Finish();
+        await Settle(200);
+        report.Check(app.Settings.General.OnboardingDone, "Onboarding did not record that it finished");
+        report.Check(app.Shell.GetStartupState() == StartupState.On, "Onboarding did not register start-up");
+        report.Check(!app.OpenWindows.OfType<OnboardingWindow>().Any(), "Onboarding window did not close");
+
+        // --- reset and uninstall ---
+        app.Settings.Capture.DelaySeconds = 9;
+        app.ResetSettings();
+        report.Check(app.Settings.Capture.DelaySeconds == 3 && app.Settings.Upload.Provider == UploadProvider.None, "Reset did not restore defaults");
+        report.Check(app.Settings.General.OnboardingDone, "Reset would show onboarding again");
+        app.Shell.RemoveAll();
+        report.Check(app.Shell.GetStartupState() == StartupState.Off && !app.Shell.IsContextMenuInstalled() && !app.Shell.IsSendToInstalled(), "Uninstall cleanup left registrations behind");
+
+        string secret = app.Secrets.Protect("s3cret");
+        report.Check(secret != "s3cret" && app.Secrets.Unprotect(secret) == "s3cret", "Secrets are not protected");
+        report.Values["updates"] = app.Updates.Describe();
+        report.Check(!app.Updates.IsAvailable, "A development copy claims it can update itself");
         report.Values["openWindows"] = app.OpenWindows.Select(w => w.GetType().Name).ToArray();
+        app.Settings.General.ShowNotifications = false;
     }
 
     private static async Task RealCapture(AppServices app, Report report)

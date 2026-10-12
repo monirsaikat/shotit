@@ -11,7 +11,9 @@ using ShotIt.Capture;
 using ShotIt.Core.Editing;
 using ShotIt.Core.History;
 using ShotIt.Core.Settings;
+using ShotIt.Core.Upload;
 using ShotIt.Rendering;
+using ShotIt.Shell;
 
 namespace ShotIt.App.Services;
 
@@ -23,7 +25,11 @@ public sealed class AppServices : IDisposable
     private readonly List<Window> _openWindows = [];
     private bool _disposed;
 
-    public AppServices(AppPaths paths, Dispatcher dispatcher)
+    /// <param name="paths">Where settings, history and logs live.</param>
+    /// <param name="dispatcher">The UI thread's dispatcher.</param>
+    /// <param name="shellRoot">Registry root for shell integration; the self-test passes a scratch key so the real one is never touched.</param>
+    /// <param name="sendToFolder">Send-to folder override for the self-test.</param>
+    public AppServices(AppPaths paths, Dispatcher dispatcher, RegistryKey? shellRoot = null, string? sendToFolder = null)
     {
         Paths = paths;
         Dispatcher = dispatcher;
@@ -44,6 +50,12 @@ public sealed class AppServices : IDisposable
         Pins = new PinManager(this);
         Actions = new CaptureActions(this);
         Controller = new CaptureController(this);
+        Secrets = new DpapiSecretProtector();
+        Shell = new ShellIntegration(Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "ShotIt.exe"), shellRoot, sendToFolder);
+        PrintScreen = new PrintScreenBinding(shellRoot);
+        Updates = new UpdateService(Settings, Log);
+        Features = new FeatureActions(this);
+        CaptureService.Preference = Settings.Capture.Backend;
 
         _saveTimer = new DispatcherTimer(DispatcherPriority.Background, dispatcher) { Interval = TimeSpan.FromMilliseconds(600) };
         _saveTimer.Tick += (_, _) => SaveSettingsNow();
@@ -67,6 +79,11 @@ public sealed class AppServices : IDisposable
     public PinManager Pins { get; }
     public CaptureActions Actions { get; }
     public CaptureController Controller { get; }
+    public ISecretProtector Secrets { get; }
+    public ShellIntegration Shell { get; }
+    public PrintScreenBinding PrintScreen { get; }
+    public UpdateService Updates { get; }
+    public FeatureActions Features { get; }
 
     /// <summary>Raised after settings were changed and saved, so open windows can refresh.</summary>
     public event Action? SettingsChanged;
@@ -101,6 +118,25 @@ public sealed class AppServices : IDisposable
         CaptureService.Preference = Settings.Capture.Backend;
         SaveSettingsNow();
         SettingsChanged?.Invoke();
+    }
+
+    /// <summary>Puts every setting back to its default. History, screenshots and shell integration are left alone.</summary>
+    public void ResetSettings()
+    {
+        var fresh = new AppSettings();
+        Settings.General = fresh.General;
+        Settings.General.OnboardingDone = true;
+        Settings.General.StartWithWindows = Shell.GetStartupState() == StartupState.On;
+        Settings.Hotkeys = fresh.Hotkeys;
+        Settings.Capture = fresh.Capture;
+        Settings.Output = fresh.Output;
+        Settings.Editor = fresh.Editor;
+        Settings.History = fresh.History;
+        Settings.Upload = fresh.Upload;
+        Settings.Updates = fresh.Updates;
+        Settings.Privacy = fresh.Privacy;
+        Settings.Shell = new ShellSettings { ContextMenu = Shell.IsContextMenuInstalled(), SendTo = Shell.IsSendToInstalled() };
+        ApplySettings();
     }
 
     public void ApplyTheme()
@@ -149,6 +185,17 @@ public sealed class AppServices : IDisposable
         }
 
         var window = Track(create());
+        window.Show();
+        window.Activate();
+        return window;
+    }
+
+    /// <summary>Shows a secondary window and closes it with the application.</summary>
+    public T ShowWindow<T>(T window, Window? owner = null)
+        where T : Window
+    {
+        Track(window);
+        if (owner is { IsVisible: true }) window.Owner = owner;
         window.Show();
         window.Activate();
         return window;

@@ -24,6 +24,9 @@ public sealed class Notifier
     /// <summary>The most recent notification, for tests and for the log.</summary>
     public (string Title, string Text)? Last { get; private set; }
 
+    /// <summary>Forgets the last notification, so a test can wait for the next one.</summary>
+    public void Reset() => Last = null;
+
     public void Info(string title, string text, Action? onClick = null)
     {
         Last = (title, text);

@@ -200,13 +200,18 @@ public sealed class OutputService
                 // Point the library entry at the user's file and drop the internal copy.
                 if (result.LibraryPath is { } library && !string.Equals(library, path, StringComparison.OrdinalIgnoreCase)) TryDelete(library);
                 result.LibraryPath = null;
-                _history.Update(existing with { FilePath = path, FileSize = new FileInfo(path).Length });
+                _history.Update(existing with
+                {
+                    FilePath = path, FileSize = new FileInfo(path).Length, Width = result.Image.Width, Height = result.Image.Height,
+                    Thumbnail = ImageCodec.Thumbnail(result.Image),
+                });
             }
             else
             {
                 result.HistoryId = _history.Add(NewItem(result, path));
             }
 
+            SyncProject(result);
             HistoryChanged?.Invoke();
         }
         catch (Exception ex)
@@ -244,6 +249,7 @@ public sealed class OutputService
             WriteFile(path, result.Image, ImageFormat.Png);
             result.LibraryPath = path;
             result.HistoryId = _history.Add(NewItem(result, path));
+            SyncProject(result);
             HistoryChanged?.Invoke();
             return path;
         }
@@ -300,6 +306,7 @@ public sealed class OutputService
             {
                 // Only files inside ShotIt's own library folder are deleted; files the user saved elsewhere stay.
                 if (IsInsideLibrary(item.FilePath)) TryDelete(item.FilePath);
+                TryDelete(ProjectPath(item.Id));
             }
 
             _history.Delete(expired.Select(e => e.Id));
@@ -310,6 +317,139 @@ public sealed class OutputService
         {
             _log.Warning(ex, "Retention pass failed");
             return 0;
+        }
+    }
+
+    // ------------------------------------------------------------------ editable projects
+
+    public string ProjectPath(long historyId) =>
+        Path.Combine(_paths.ProjectsDirectory, historyId.ToString(System.Globalization.CultureInfo.InvariantCulture) + ProjectFile.Extension);
+
+    /// <summary>Keeps the editable project for a history entry in step with the capture: written when there are annotations, removed when there are none.</summary>
+    private void SyncProject(CaptureResult result)
+    {
+        if (result.HistoryId is not { } id) return;
+        string path = ProjectPath(id);
+        try
+        {
+            if (ProjectFile.HasEditableContent(result.Document)) ProjectFile.Save(path, result.Document);
+            else TryDelete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            _log.Warning(ex, "Could not store the editable project for history entry {Id}", id);
+        }
+    }
+
+    /// <summary>
+    /// Loads a history entry for editing. When an editable project exists the annotations come back as
+    /// objects; otherwise the flattened picture is opened. Returns null (with a reason) when the file is gone.
+    /// </summary>
+    public CaptureResult? OpenHistoryItem(HistoryItem item, out string? error)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        error = null;
+        DocState? document = null;
+        string project = ProjectPath(item.Id);
+        if (File.Exists(project))
+        {
+            try
+            {
+                document = ProjectFile.Load(project);
+            }
+            catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
+            {
+                _log.Warning(ex, "The editable project for history entry {Id} could not be read; opening the picture instead", item.Id);
+            }
+        }
+
+        if (document is null)
+        {
+            if (!File.Exists(item.FilePath))
+            {
+                error = "The file is no longer there. It may have been moved or deleted.";
+                return null;
+            }
+
+            try
+            {
+                document = DocState.FromImage(ImageCodec.DecodeFile(item.FilePath));
+            }
+            catch (Exception ex) when (ex is NotSupportedException or IOException or UnauthorizedAccessException)
+            {
+                error = "The file could not be read as an image.";
+                return null;
+            }
+        }
+
+        bool internalCopy = IsInsideLibrary(item.FilePath);
+        return new CaptureResult(document, item.SourceApp, item.SourceTitle)
+        {
+            HistoryId = item.Id,
+            LibraryPath = internalCopy ? item.FilePath : null,
+            SavedPath = internalCopy || !File.Exists(item.FilePath) ? null : item.FilePath,
+        };
+    }
+
+    /// <summary>Removes history entries, their editable projects and ShotIt's internal copies. Files the user saved elsewhere stay.</summary>
+    public int DeleteHistoryItems(IReadOnlyCollection<HistoryItem> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        if (items.Count == 0) return 0;
+        try
+        {
+            foreach (var item in items)
+            {
+                if (IsInsideLibrary(item.FilePath)) TryDelete(item.FilePath);
+                TryDelete(ProjectPath(item.Id));
+            }
+
+            _history.Delete(items.Select(i => i.Id));
+            HistoryChanged?.Invoke();
+            return items.Count;
+        }
+        catch (Exception ex)
+        {
+            _log.Warning(ex, "Deleting history entries failed");
+            return 0;
+        }
+    }
+
+    /// <summary>Removes everything from history except entries marked "Keep". Returns how many were removed.</summary>
+    public int ClearHistory()
+    {
+        try
+        {
+            // Collect first, then delete: paging over a list that shrinks would skip entries.
+            var doomed = new List<HistoryItem>();
+            for (int offset = 0; ; offset += 500)
+            {
+                var page = _history.Query(null, 500, offset, withThumbnails: false);
+                doomed.AddRange(page.Where(i => !i.Keep));
+                if (page.Count < 500) break;
+            }
+
+            int removed = DeleteHistoryItems(doomed);
+            return removed;
+        }
+        catch (Exception ex)
+        {
+            _log.Warning(ex, "Clearing history failed");
+            return 0;
+        }
+    }
+
+    public void SetKeep(HistoryItem item, bool keep)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        try
+        {
+            if (_history.Get(item.Id) is { } current) _history.Update(current with { Keep = keep });
+            HistoryChanged?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            _log.Warning(ex, "Could not change the keep flag");
         }
     }
 

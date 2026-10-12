@@ -172,6 +172,9 @@ public sealed class GeneralSettings
     public bool PlaySound { get; set; }
     public bool ShowNotifications { get; set; } = true;
     public bool OnboardingDone { get; set; }
+
+    /// <summary>Language tag for text recognition; empty means "use my Windows languages".</summary>
+    public string OcrLanguage { get; set; } = string.Empty;
 }
 
 public sealed class HotkeySettings

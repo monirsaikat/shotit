@@ -160,7 +160,8 @@ public sealed class HistoryRepository : IDisposable
         {
             using var cmd = _db.CreateCommand();
             cmd.CommandText = """
-                UPDATE items SET file_path=$path, upload_url=$url, delete_url=$del, ocr_text=$ocr, tags=$tags, keep=$keep, file_size=$size
+                UPDATE items SET file_path=$path, upload_url=$url, delete_url=$del, ocr_text=$ocr, tags=$tags, keep=$keep, file_size=$size,
+                    width=$w, height=$h, thumbnail=COALESCE($thumb, thumbnail)
                 WHERE id=$id
                 """;
             cmd.Parameters.AddWithValue("$id", item.Id);
@@ -171,6 +172,10 @@ public sealed class HistoryRepository : IDisposable
             cmd.Parameters.AddWithValue("$tags", item.Tags);
             cmd.Parameters.AddWithValue("$keep", item.Keep ? 1 : 0);
             cmd.Parameters.AddWithValue("$size", item.FileSize);
+            cmd.Parameters.AddWithValue("$w", item.Width);
+            cmd.Parameters.AddWithValue("$h", item.Height);
+            // A null thumbnail (items read without thumbnails) leaves the stored one untouched.
+            cmd.Parameters.AddWithValue("$thumb", (object?)item.Thumbnail ?? DBNull.Value);
             cmd.ExecuteNonQuery();
         }
     }

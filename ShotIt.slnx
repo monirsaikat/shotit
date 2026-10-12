@@ -1,0 +1,23 @@
+<Solution>
+  <Folder Name="/build/">
+    <Project Path="build/IconGen/IconGen.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/ShotIt.App/ShotIt.App.csproj" />
+    <Project Path="src/ShotIt.Capture/ShotIt.Capture.csproj" />
+    <Project Path="src/ShotIt.Core/ShotIt.Core.csproj" />
+    <Project Path="src/ShotIt.Native/ShotIt.Native.csproj" />
+    <Project Path="src/ShotIt.Ocr/ShotIt.Ocr.csproj" />
+    <Project Path="src/ShotIt.Rendering/ShotIt.Rendering.csproj" />
+    <Project Path="src/ShotIt.Shell/ShotIt.Shell.csproj" />
+    <Project Path="src/ShotIt.Upload/ShotIt.Upload.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ShotIt.Capture.Tests/ShotIt.Capture.Tests.csproj" />
+    <Project Path="tests/ShotIt.Core.Tests/ShotIt.Core.Tests.csproj" />
+    <Project Path="tests/ShotIt.Ocr.Tests/ShotIt.Ocr.Tests.csproj" />
+    <Project Path="tests/ShotIt.Rendering.Tests/ShotIt.Rendering.Tests.csproj" />
+    <Project Path="tests/ShotIt.Shell.Tests/ShotIt.Shell.Tests.csproj" />
+    <Project Path="tests/ShotIt.Upload.Tests/ShotIt.Upload.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -49,6 +49,9 @@ public sealed class AppPaths
     /// <summary>Automatic copies of every capture, organised by month. Managed by the retention policy.</summary>
     public string LibraryDirectory => Path.Combine(DataRoot, "captures");
 
+    /// <summary>Editable projects (base image plus annotations) for history entries, named by entry id.</summary>
+    public string ProjectsDirectory => Path.Combine(DataRoot, "projects");
+
     /// <summary>Default folder for files the user saves explicitly.</summary>
     public static string DefaultSaveFolder =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "ShotIt");

@@ -3,6 +3,7 @@ using System.Windows.Threading;
 using ShotIt.App.Infrastructure;
 using ShotIt.App.Overlay;
 using ShotIt.App.Services;
+using ShotIt.App.Views;
 using ShotIt.Core.Settings;
 using ShotIt.Native;
 using ShotIt.Rendering;
@@ -81,15 +82,16 @@ public partial class App : Application
 
         Dispatcher.BeginInvoke(services.Controller.Prewarm, DispatcherPriority.ApplicationIdle);
         services.RunRetentionSoon();
+        StartUpdateChecks(services);
     }
 
     /// <summary>Creates the services and installs the global safety nets. Shared with the self-test.</summary>
-    internal AppServices Initialize(AppPaths paths)
+    internal AppServices Initialize(AppPaths paths, Microsoft.Win32.RegistryKey? shellRoot = null, string? sendToFolder = null)
     {
         AppIdentity.Apply();
         AppIdentity.AllowDarkMenus();
         WpfTextMeasurer.Install();
-        var services = new AppServices(paths, Dispatcher);
+        var services = new AppServices(paths, Dispatcher, shellRoot, sendToFolder);
         _services = services;
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
@@ -182,6 +184,20 @@ public partial class App : Application
         }
     }
 
+    /// <summary>First check a minute after start-up (never during it), then once a day while ShotIt keeps running.</summary>
+    private void StartUpdateChecks(AppServices services)
+    {
+        var timer = new DispatcherTimer(DispatcherPriority.ApplicationIdle, Dispatcher) { Interval = TimeSpan.FromMinutes(1) };
+        timer.Tick += async (_, _) =>
+        {
+            timer.Interval = TimeSpan.FromHours(24);
+            if (_exiting || !services.Updates.AutoCheckEnabled || services.Updates.UpdateReady) return;
+            await services.Updates.CheckAndDownloadAsync(userInitiated: false);
+            if (services.Updates.UpdateReady) services.Notifier.Info("ShotIt update ready", "It installs the next time ShotIt closes.");
+        };
+        timer.Start();
+    }
+
     private void OpenSettings() => WindowsHost.OpenSettings(_services!);
 
     private void OpenHistory() => WindowsHost.OpenHistory(_services!);
@@ -201,6 +217,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _tray?.Dispose();
+        _services?.Updates.ApplyOnExit();
         _services?.Dispose();
         _instance?.Dispose();
         base.OnExit(e);

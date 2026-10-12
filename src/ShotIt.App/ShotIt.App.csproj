@@ -11,18 +11,29 @@
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <AssemblyTitle>ShotIt</AssemblyTitle>
     <Description>ShotIt screenshot and annotation tool</Description>
+    <!-- Velopack must run before WPF starts, so the entry point is Program.Main rather than the generated one. -->
+    <StartupObject>ShotIt.App.Program</StartupObject>
+    <!-- Set by the release pipeline: the https address updates are downloaded from. Empty means "no update feed". -->
+    <UpdateFeedUrl Condition="'$(UpdateFeedUrl)' == ''"></UpdateFeedUrl>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Serilog" />
     <PackageReference Include="Serilog.Sinks.File" />
+    <PackageReference Include="Velopack" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ShotIt.Core\ShotIt.Core.csproj" />
     <ProjectReference Include="..\ShotIt.Native\ShotIt.Native.csproj" />
     <ProjectReference Include="..\ShotIt.Capture\ShotIt.Capture.csproj" />
     <ProjectReference Include="..\ShotIt.Rendering\ShotIt.Rendering.csproj" />
+    <ProjectReference Include="..\ShotIt.Upload\ShotIt.Upload.csproj" />
+    <ProjectReference Include="..\ShotIt.Ocr\ShotIt.Ocr.csproj" />
+    <ProjectReference Include="..\ShotIt.Shell\ShotIt.Shell.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Assets\shotit.ico" />
+    <ApplicationDefinition Remove="App.xaml" />
+    <Page Include="App.xaml" />
+    <AssemblyMetadata Include="UpdateFeedUrl" Value="$(UpdateFeedUrl)" />
   </ItemGroup>
 </Project>
