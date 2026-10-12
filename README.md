@@ -42,7 +42,7 @@ No account, no telemetry, no advertising. Nothing leaves the computer unless you
 
 ## Install
 
-Download from the releases page:
+Download from the [releases page](https://github.com/monirsaikat/shotit/releases):
 
 | File | Choose it when |
 |---|---|
@@ -106,10 +106,19 @@ To build installers see [docs/releasing.md](docs/releasing.md).
 
 ## Current state
 
-Version 0.1. The application is feature-complete against the version 1.0 scope in [PLAN.md](PLAN.md)
-except for the items listed as open or partial in the [pitfall register](docs/pitfalls.md).
-Before a public release it still needs a code-signing certificate, an update address, and the manual
-test matrix (mixed-DPI, HDR, touch, ARM64 hardware). Scrolling capture and screen recording are planned for 1.1.
+Version 0.1, an early release. Capture, annotation, pinning, text recognition, QR, upload, history,
+settings and the installers all work and are covered by automated tests.
+
+Not built yet from the version 1.0 scope in [PLAN.md](PLAN.md):
+
+- Editor: blur and pixelate brushes, rotating objects, grouping, smart guides, text alignment, arrow head styles, custom sticker folder, image watermark
+- Export: WebP, copy as data URI, copy as Markdown link
+- Capture: monitor selection by number, "Open with", fixed-size presets
+- History: filters by date and app, list view, tags, export as zip
+- Everything marked open or partial in the [pitfall register](docs/pitfalls.md)
+
+The installers are not code-signed yet, so Windows SmartScreen shows a warning on first run.
+Mixed-DPI, HDR, touch and ARM64 hardware have not been tested. Scrolling capture and screen recording are planned for 1.1.
 
 Differences from the original plan, and why:
 
