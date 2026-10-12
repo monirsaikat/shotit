@@ -35,3 +35,6 @@ dotnet_diagnostic.CA1720.severity = none
 dotnet_diagnostic.CA1308.severity = none
 dotnet_diagnostic.CA2007.severity = none   # ConfigureAwait: this is an application, not a library
 dotnet_diagnostic.CA1822.severity = none   # 'can be static' is style, not correctness
+dotnet_diagnostic.CA1725.severity = none   # override parameter names
+dotnet_diagnostic.CA1001.severity = none   # WPF Application/Window lifetimes are managed by the framework
+dotnet_diagnostic.CA1869.severity = none
