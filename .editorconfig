@@ -1,0 +1,36 @@
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{csproj,props,targets,xml,xaml,json,yml,yaml,wxs,manifest}]
+indent_size = 2
+
+[*.cs]
+csharp_style_namespace_declarations = file_scoped:warning
+dotnet_sort_system_directives_first = true
+
+# Rules that fight this code base's conventions rather than find bugs.
+dotnet_diagnostic.CA1716.severity = none   # parameter names that are VB keywords
+dotnet_diagnostic.CA1002.severity = none   # List<T> on settings DTOs (needed by the JSON serializer)
+dotnet_diagnostic.CA2227.severity = none   # settable collection properties on settings DTOs
+dotnet_diagnostic.CA1819.severity = none   # byte[] properties (image data)
+dotnet_diagnostic.CA1054.severity = none   # string URLs
+dotnet_diagnostic.CA1055.severity = none
+dotnet_diagnostic.CA1056.severity = none
+dotnet_diagnostic.CA1031.severity = none   # feature boundaries deliberately catch everything and report
+dotnet_diagnostic.CA1848.severity = none
+dotnet_diagnostic.CA1873.severity = none
+dotnet_diagnostic.CA1515.severity = none   # public types in the app assembly are used from XAML
+dotnet_diagnostic.CA1812.severity = none   # classes instantiated from XAML
+dotnet_diagnostic.CA1707.severity = none   # underscores in test names
+dotnet_diagnostic.CA1034.severity = none
+dotnet_diagnostic.CA1724.severity = none
+dotnet_diagnostic.CA1711.severity = none
+dotnet_diagnostic.CA1720.severity = none
+dotnet_diagnostic.CA1308.severity = none
+dotnet_diagnostic.CA2007.severity = none   # ConfigureAwait: this is an application, not a library
