@@ -224,8 +224,8 @@ public sealed record RedactAnnotation : RectAnnotation
 
 public sealed record StickerAnnotation : RectAnnotation
 {
-    /// <summary>An emoji or any short text glyph.</summary>
-    public string Glyph { get; init; } = "✅";
+    /// <summary>A built-in sticker name (check, cross, warning, info, question, star, heart) or any short text.</summary>
+    public string Glyph { get; init; } = "check";
 }
 
 /// <summary>An image pasted into the editor as an object.</summary>

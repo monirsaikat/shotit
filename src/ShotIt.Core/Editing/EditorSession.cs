@@ -54,7 +54,7 @@ public sealed record ToolOptions
     public bool TextBackground { get; init; }
     public double BlurRadius { get; init; } = 12;
     public int PixelSize { get; init; } = 12;
-    public string Sticker { get; init; } = "✅";
+    public string Sticker { get; init; } = "check";
     public double StepRadius { get; init; } = 16;
     public double SpotlightDim { get; init; } = 0.6;
 }
