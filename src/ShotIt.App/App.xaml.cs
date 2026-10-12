@@ -78,7 +78,7 @@ public partial class App : Application
             services.Notifier.Warn("Portable folder is read-only", "Settings and history are stored in your user profile instead.");
 
         if (command.Command != AppCommand.None) Execute(command);
-        else if (!services.Settings.General.OnboardingDone && !command.Silent) ShowOnboarding();
+        else if (!command.Silent) services.Controller.StartRegion(afterRegionOverride: AfterCaptureAction.ShowToolbar);
 
         Dispatcher.BeginInvoke(() => services.Pins.RestoreSession(), DispatcherPriority.ApplicationIdle);
         Dispatcher.BeginInvoke(services.Controller.Prewarm, DispatcherPriority.ApplicationIdle);
@@ -178,8 +178,8 @@ public partial class App : Application
                 case AppCommand.OpenHistory: OpenHistory(); break;
                 case AppCommand.Quit: ExitApplication(); break;
                 case AppCommand.None:
-                    // Launched again without arguments: show that ShotIt is alive.
-                    if (!command.Silent) OpenSettings();
+                    // Clicking the app starts a region capture with the annotation toolbar.
+                    if (!command.Silent) services.Controller.StartRegion(afterRegionOverride: AfterCaptureAction.ShowToolbar);
                     break;
             }
         }
@@ -206,8 +206,6 @@ public partial class App : Application
     private void OpenSettings() => WindowsHost.OpenSettings(_services!);
 
     private void OpenHistory() => WindowsHost.OpenHistory(_services!);
-
-    private void ShowOnboarding() => WindowsHost.OpenOnboarding(_services!);
 
     private void RunSelfTest(AppCommandLine command) => SelfTest.Run(this, command);
 

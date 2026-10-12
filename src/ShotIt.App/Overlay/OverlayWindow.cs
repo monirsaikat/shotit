@@ -305,8 +305,8 @@ public sealed class OverlayWindow : Window
     {
         if (_session is null) return;
         var session = _session;
-        if (e.ChangedButton == MouseButton.Left && _root.IsMouseCaptured) _root.ReleaseMouseCapture();
         session.MouseUp(ToScreenPx(e), e.ChangedButton);
+        if (e.ChangedButton == MouseButton.Left && _root.IsMouseCaptured) _root.ReleaseMouseCapture();
         e.Handled = true;
     }
 

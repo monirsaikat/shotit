@@ -110,7 +110,8 @@ public sealed class CaptureController
 
     // ------------------------------------------------------------------ starting a session
 
-    public void StartRegion(OverlayMode mode = OverlayMode.Region, PixelRect? preselect = null)
+    public void StartRegion(OverlayMode mode = OverlayMode.Region, PixelRect? preselect = null,
+        AfterCaptureAction? afterRegionOverride = null)
     {
         if (_session is not null)
         {
@@ -143,8 +144,9 @@ public sealed class CaptureController
                     settings.Capture.FixedWidth, settings.Capture.FixedHeight).MoveInside(monitor.Bounds);
             }
 
-            var session = new OverlaySession(frame, snap, settings, mode, preselect);
+            var session = new OverlaySession(frame, snap, settings, mode, preselect, afterRegionOverride);
             session.ActionRequested += OnAction;
+            session.SelectionCompleted += OnSelectionCompleted;
             EnsureWindows(frame.Topology);
             _session = session;
 
@@ -345,6 +347,7 @@ public sealed class CaptureController
         if (session is not null)
         {
             session.ActionRequested -= OnAction;
+            session.SelectionCompleted -= OnSelectionCompleted;
             session.End();
         }
 
@@ -402,6 +405,23 @@ public sealed class CaptureController
             _log.Error(ex, "Completing the capture failed");
             EndSession();
             _app.Notifier.Warn("Capture failed", "ShotIt could not finish the capture. Details are in the log file.");
+        }
+    }
+
+    private void OnSelectionCompleted()
+    {
+        var session = _session;
+        if (session?.BuildResult() is not { } built) return;
+        try
+        {
+            var result = new CaptureResult(built.Document, built.SourceApp, built.SourceTitle, built.ScreenRegion);
+            if (!ClipboardService.SetImage(result.Image))
+                _app.Notifier.Warn("Could not copy", "Another program is holding the clipboard. Use the toolbar to try again.");
+        }
+        catch (Exception ex)
+        {
+            _log.Error(ex, "Copying the selected region failed");
+            _app.Notifier.Warn("Could not copy", "Use the toolbar to try again. Details are in the log file.");
         }
     }
 

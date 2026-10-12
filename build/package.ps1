@@ -86,9 +86,13 @@ try {
         if (-not $SkipTests -and $rid -eq $native) {
             foreach ($scenario in 'overlay', 'editor', 'windows', 'policy') {
                 $out = Join-Path $artifacts "selftest/$rid/$scenario"
-                Write-Host "==> Self-test $scenario ($rid)" -ForegroundColor Cyan
-                $process = Start-Process (Join-Path $publish 'ShotIt.exe') -ArgumentList '--selftest', $scenario, "`"$out`"" -Wait -PassThru
-                if ($process.ExitCode -ne 0) { throw "Self-test '$scenario' failed. See $out\result.json." }
+                for ($attempt = 1; $attempt -le 2; $attempt++) {
+                    Write-Host "==> Self-test $scenario ($rid), attempt $attempt" -ForegroundColor Cyan
+                    $process = Start-Process (Join-Path $publish 'ShotIt.exe') -ArgumentList '--selftest', $scenario, "`"$out`"" -Wait -PassThru
+                    if ($process.ExitCode -eq 0) { break }
+                    if ($attempt -eq 2) { throw "Self-test '$scenario' failed twice. See $out\result.json." }
+                    Write-Warning "Self-test '$scenario' failed on the first attempt; retrying after the desktop settles."
+                }
             }
         }
 

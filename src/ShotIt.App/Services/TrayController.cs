@@ -118,7 +118,8 @@ public sealed class TrayController : IDisposable
         {
             case TrayEvent.LeftClick:
                 // Give the click a moment to finish so the taskbar is not captured mid-animation.
-                _app.Dispatcher.BeginInvoke(() => _app.Controller.StartRegion(), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                _app.Dispatcher.BeginInvoke(() => _app.Controller.StartRegion(afterRegionOverride: AfterCaptureAction.ShowToolbar),
+                    System.Windows.Threading.DispatcherPriority.ApplicationIdle);
                 break;
             case TrayEvent.ContextMenu:
                 ShowMenu(anchor);

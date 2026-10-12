@@ -63,6 +63,7 @@ ARM64 versions of each are provided too. Windows 10 version 2004 or later is req
 | Ctrl + Shift + Print Screen | Repeat the last region |
 | Ctrl + Shift + P | Show or hide pinned images |
 
+Opening ShotIt starts a region capture. Drag over the area you want and release to copy it to the clipboard; the annotation toolbar stays open for drawing and text.
 While selecting: Ctrl+C copies, Ctrl+S saves, Enter does your default action, Esc cancels.
 Every hotkey can be changed in Settings. Right-click the tray icon for everything else.
 

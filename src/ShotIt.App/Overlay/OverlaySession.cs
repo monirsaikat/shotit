@@ -63,6 +63,7 @@ public sealed class OverlaySession
 
     private readonly SnapIndex _snap;
     private readonly AppSettings _settings;
+    private readonly AfterCaptureAction? _afterRegionOverride;
     private readonly List<PixelPoint> _lasso = [];
     private DragKind _drag;
     private PixelPoint _lastDragPx;
@@ -72,11 +73,13 @@ public sealed class OverlaySession
     private CancellationTokenSource? _chainCts;
     private bool _ended;
 
-    public OverlaySession(ScreenFrame frame, SnapIndex snap, AppSettings settings, OverlayMode mode, PixelRect? preselect = null)
+    public OverlaySession(ScreenFrame frame, SnapIndex snap, AppSettings settings, OverlayMode mode, PixelRect? preselect = null,
+        AfterCaptureAction? afterRegionOverride = null)
     {
         Frame = frame ?? throw new ArgumentNullException(nameof(frame));
         _snap = snap ?? throw new ArgumentNullException(nameof(snap));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _afterRegionOverride = afterRegionOverride;
         Mode = mode;
         Bitmap = frame.Image.ToCachedBitmap();
         Selection = new SelectionModel(frame.VirtualBounds);
@@ -124,6 +127,8 @@ public sealed class OverlaySession
     public bool IsTextEditing { get; set; }
 
     public event Action? Changed;
+    /// <summary>A new region is ready to copy while the annotation toolbar stays open.</summary>
+    public event Action? SelectionCompleted;
     public event Action<OverlayAction>? ActionRequested;
 
     private void RaiseChanged()
@@ -367,8 +372,9 @@ public sealed class OverlaySession
     {
         Phase = OverlayPhase.Adjusting;
         HoverTarget = null;
-        var after = _settings.Capture.AfterRegion;
-        if (after != AfterCaptureAction.ShowToolbar && Mode != OverlayMode.Preselected) RequestAction(Map(after));
+        var after = _afterRegionOverride ?? _settings.Capture.AfterRegion;
+        if (after == AfterCaptureAction.ShowToolbar) SelectionCompleted?.Invoke();
+        else if (Mode != OverlayMode.Preselected) RequestAction(Map(after));
     }
 
     private void ResetSelection()

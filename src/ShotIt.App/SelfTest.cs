@@ -57,6 +57,8 @@ internal static class SelfTest
         {
             string data = Path.Combine(output, "data");
             if (Directory.Exists(data)) Directory.Delete(data, recursive: true);
+            string saved = Path.Combine(output, "saved");
+            if (Directory.Exists(saved)) Directory.Delete(saved, recursive: true);
             // Shell integration is exercised against a scratch registry key and folder, never the real ones.
             Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(ScratchKey, throwOnMissingSubKey: false);
             var scratch = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(ScratchKey, writable: true);
@@ -196,6 +198,22 @@ internal static class SelfTest
 
         report.Values["warmStartMs"] = warm.Select(w => Math.Round(w, 1)).ToArray();
         report.Check(warm.Order().ElementAt(warm.Count / 2) <= 150, $"Median warm overlay start {warm.Order().ElementAt(warm.Count / 2):0} ms exceeds 150 ms");
+
+        // A completed region is copied, while the overlay remains available for annotation.
+        app.Controller.StartRegion(afterRegionOverride: AfterCaptureAction.ShowToolbar);
+        var copySession = app.Controller.CurrentSession;
+        if (copySession is not null)
+        {
+            copySession.MouseDown(region.Location, MouseButton.Left, 1);
+            copySession.MouseMove(new PixelPoint(region.Right, region.Bottom));
+            copySession.MouseUp(new PixelPoint(region.Right, region.Bottom), MouseButton.Left);
+            report.Check(app.Controller.IsSessionActive && copySession.Phase == OverlayPhase.Adjusting,
+                "The overlay closed before the selected region could be annotated");
+            report.Check(ClipboardService.GetImage()?.Size == region.Size, "The selected region was not copied to the clipboard");
+        }
+        else report.Failures.Add("No session for the selection and clipboard check");
+        app.Controller.CancelSession("self-test");
+        await Settle(150);
 
         // 2. Pixel exactness: what is on the real screen inside the region must equal the frame.
         app.Controller.StartRegion(OverlayMode.Preselected, region);

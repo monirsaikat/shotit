@@ -279,7 +279,7 @@ public sealed class SettingsWindow : Window
         p.Children.Add(Ui.SubHeading("After capturing"));
         var actions = Options<AfterCaptureAction>(Ui.Describe).ToList();
         p.Children.Add(Ui.Row("After selecting a region", Ui.Combo(actions, c.AfterRegion, v => { c.AfterRegion = v; Changed(); }),
-            "“Show the toolbar” lets you annotate first. The other choices finish the capture the moment you release the mouse."));
+            "“Show the toolbar” copies the selection and keeps it open for annotation. The other choices finish the capture when you release the mouse."));
         p.Children.Add(Ui.Row("After a full-screen or window capture", Ui.Combo(actions.Where(a => a.Item1 != AfterCaptureAction.ShowToolbar), c.AfterFullScreen, v => { c.AfterFullScreen = v; Changed(); })));
         p.Children.Add(Ui.Row("When I press Enter", Ui.Combo(actions.Where(a => a.Item1 != AfterCaptureAction.ShowToolbar), c.EnterAction, v => { c.EnterAction = v; Changed(); })));
 
