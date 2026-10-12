@@ -43,7 +43,7 @@ public static partial class FileNameTemplate
                 "width" => context.Width.ToString(CultureInfo.InvariantCulture),
                 "height" => context.Height.ToString(CultureInfo.InvariantCulture),
                 "size" => string.Create(CultureInfo.InvariantCulture, $"{context.Width}x{context.Height}"),
-                "counter" => context.Counter.ToString(int.TryParse(arg, NumberStyles.None, CultureInfo.InvariantCulture, out int digits) && digits is > 0 and < 10 ? new string('0', digits) : "0", CultureInfo.InvariantCulture),
+                "counter" or "n" => context.Counter.ToString(int.TryParse(arg, NumberStyles.None, CultureInfo.InvariantCulture, out int digits) && digits is > 0 and < 10 ? new string('0', digits) : "0", CultureInfo.InvariantCulture),
                 _ => m.Value,
             };
         });

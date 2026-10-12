@@ -11,6 +11,8 @@ public static class Icons
     public const string Arrow = "M3,13 L13,3 M7,3 L13,3 L13,9";
     public const string Line = "M3,13 L13,3";
     public const string Rectangle = "M2.5,4 H13.5 V12 H2.5 Z";
+    public const string RoundedRectangle = "M5,4 H11 A2.5,2.5 0 0 1 13.5,6.5 V9.5 A2.5,2.5 0 0 1 11,12 H5 A2.5,2.5 0 0 1 2.5,9.5 V6.5 A2.5,2.5 0 0 1 5,4 Z";
+    public const string Eraser = "M3,10.5 L8.5,3.5 L13,7 L8.5,13 H5.5 Z M5.5,13 H13.5";
     public const string Ellipse = "M2,8 A6,4.5 0 1 0 14,8 A6,4.5 0 1 0 2,8 Z";
     public const string Pen = "M2.5,13.5 L3.5,10 L10.5,3 L13,5.5 L6,12.5 Z M9,4.5 L11.5,7";
     public const string Highlighter = "M2.5,14 H9 M5,11.5 L4,9 L10,2.5 L13.5,6 L7.5,12.5 Z M4.7,10.8 L3,13";

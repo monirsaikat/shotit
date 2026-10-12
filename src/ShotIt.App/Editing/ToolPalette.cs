@@ -22,10 +22,10 @@ public sealed class ToolPalette : Border
     [
         (ToolKind.Select, Icons.Select, "Select and move (V)"),
         (ToolKind.Arrow, Icons.Arrow, "Arrow (A)"),
-        (ToolKind.Line, Icons.Line, "Line (L)"),
+        (ToolKind.Line, Icons.Line, "Line (L). Double-click a line to add a corner"),
         (ToolKind.Rectangle, Icons.Rectangle, "Rectangle (R)"),
         (ToolKind.Ellipse, Icons.Ellipse, "Ellipse (E)"),
-        (ToolKind.Pen, Icons.Pen, "Pen (P)"),
+        (ToolKind.Pen, Icons.Pen, "Pen (F)"),
         (ToolKind.Highlighter, Icons.Highlighter, "Highlighter (H)"),
         (ToolKind.Text, Icons.Text, "Text (T)"),
         (ToolKind.Steps, Icons.Steps, "Numbered steps (N)"),
@@ -36,10 +36,12 @@ public sealed class ToolPalette : Border
     [
         (ToolKind.AreaHighlight, Icons.AreaHighlight, "Highlight area", "G"),
         (ToolKind.Spotlight, Icons.Spotlight, "Spotlight (dim the rest)", "S"),
-        (ToolKind.Callout, Icons.Callout, "Callout", "C"),
+        (ToolKind.RoundedRectangle, Icons.RoundedRectangle, "Rounded rectangle", "W"),
+        (ToolKind.Callout, Icons.Callout, "Callout", "O"),
         (ToolKind.Magnifier, Icons.Magnifier, "Magnifier inset", "M"),
-        (ToolKind.Pixelate, Icons.Pixelate, "Pixelate", "X"),
-        (ToolKind.Redact, Icons.Redact, "Redact (solid, cannot be undone after saving)", "D"),
+        (ToolKind.Pixelate, Icons.Pixelate, "Pixelate", "P"),
+        (ToolKind.Redact, Icons.Redact, "Redact (solid, cannot be undone after saving)", "X"),
+        (ToolKind.Eraser, Icons.Eraser, "Eraser (removes pen and highlighter strokes)", "Q"),
         (ToolKind.Sticker, Icons.Sticker, "Sticker", "K"),
         (ToolKind.Measure, Icons.Measure, "Measure distance", "U"),
         (ToolKind.Eyedropper, Icons.Eyedropper, "Pick colour from image", "I"),
@@ -61,6 +63,7 @@ public sealed class ToolPalette : Border
     private readonly Button _sizeButton;
     private readonly Ellipse _sizeDot;
     private readonly ToggleButton _styleToggle;
+    private readonly ToggleButton _styleToggle2;
     private readonly Button _undo;
     private readonly Button _redo;
     private readonly Popup _popup;
@@ -105,6 +108,9 @@ public sealed class ToolPalette : Border
         _styleToggle = MakeToggle(Icons.Fill, "Fill");
         _styleToggle.Click += (_, _) => ToggleStyle();
         panel.Children.Add(_styleToggle);
+        _styleToggle2 = MakeToggle(Icons.Dashed, "Dashed");
+        _styleToggle2.Click += (_, _) => ToggleStyle2();
+        panel.Children.Add(_styleToggle2);
         panel.Children.Add(Separator());
 
         _undo = MakeButton(Icons.Create(Icons.Undo), "Undo (Ctrl+Z)");
@@ -183,6 +189,15 @@ public sealed class ToolPalette : Border
                 _styleToggle.IsChecked = s.Value;
             }
 
+            var style2 = StyleBinding2();
+            _styleToggle2.Visibility = style2 is null ? Visibility.Collapsed : Visibility.Visible;
+            if (style2 is { } s2)
+            {
+                _styleToggle2.Content = Icons.Create(s2.Icon);
+                _styleToggle2.ToolTip = s2.Tip;
+                _styleToggle2.IsChecked = s2.Value;
+            }
+
             _undo.IsEnabled = _session.CanUndo;
             _redo.IsEnabled = _session.CanRedo;
         }
@@ -228,12 +243,32 @@ public sealed class ToolPalette : Border
         var o = _session.Options;
         return _session.Tool switch
         {
-            ToolKind.Rectangle or ToolKind.Ellipse => (Icons.Fill, "Filled shape", o.Filled),
+            ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.RoundedRectangle => (Icons.Fill, "Filled shape", o.Filled),
             ToolKind.Arrow => (Icons.DoubleArrow, "Arrow heads on both ends", o.DoubleHeaded),
             ToolKind.Line => (Icons.Dashed, "Dashed line", o.Dashed),
             ToolKind.Text => (Icons.Frame, "Background behind text", o.TextBackground),
             _ => null,
         };
+    }
+
+    /// <summary>A second per-tool switch: dashed outlines for arrows and shapes, bold for text.</summary>
+    private (string Icon, string Tip, bool Value)? StyleBinding2()
+    {
+        var o = _session.Options;
+        return _session.Tool switch
+        {
+            ToolKind.Arrow or ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.RoundedRectangle => (Icons.Dashed, "Dashed", o.Dashed),
+            ToolKind.Text => (Icons.Bold, "Bold", o.Bold),
+            _ => null,
+        };
+    }
+
+    private void ToggleStyle2()
+    {
+        if (_updating) return;
+        var o = _session.Options;
+        bool on = _styleToggle2.IsChecked == true;
+        Commit(_session.Tool == ToolKind.Text ? o with { Bold = on } : o with { Dashed = on });
     }
 
     private void ToggleStyle()
@@ -243,7 +278,7 @@ public sealed class ToolPalette : Border
         bool on = _styleToggle.IsChecked == true;
         Commit(_session.Tool switch
         {
-            ToolKind.Rectangle or ToolKind.Ellipse => o with { Filled = on },
+            ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.RoundedRectangle => o with { Filled = on },
             ToolKind.Arrow => o with { DoubleHeaded = on },
             ToolKind.Line => o with { Dashed = on },
             ToolKind.Text => o with { TextBackground = on },
@@ -384,8 +419,14 @@ public sealed class ToolPalette : Border
     }
 
     /// <summary>Maps a key press to a tool. Returns false when the key is not a tool shortcut.</summary>
-    public static bool TryGetToolForKey(Key key, out ToolKind tool)
+    public static bool TryGetToolForKey(Key key, out ToolKind tool, bool allowCrop = false)
     {
+        if (key == Key.C && !allowCrop)
+        {
+            tool = default;
+            return false;
+        }
+
         tool = key switch
         {
             Key.V => ToolKind.Select,
@@ -393,17 +434,20 @@ public sealed class ToolPalette : Border
             Key.L => ToolKind.Line,
             Key.R => ToolKind.Rectangle,
             Key.E => ToolKind.Ellipse,
-            Key.P => ToolKind.Pen,
+            Key.F => ToolKind.Pen,
+            Key.P => ToolKind.Pixelate,
+            Key.W => ToolKind.RoundedRectangle,
+            Key.Q => ToolKind.Eraser,
+            Key.O => ToolKind.Callout,
             Key.H => ToolKind.Highlighter,
             Key.T => ToolKind.Text,
             Key.N => ToolKind.Steps,
             Key.B => ToolKind.Blur,
             Key.G => ToolKind.AreaHighlight,
             Key.S => ToolKind.Spotlight,
-            Key.C => ToolKind.Callout,
+            Key.C => ToolKind.Crop,
             Key.M => ToolKind.Magnifier,
-            Key.X => ToolKind.Pixelate,
-            Key.D => ToolKind.Redact,
+            Key.X => ToolKind.Redact,
             Key.K => ToolKind.Sticker,
             Key.U => ToolKind.Measure,
             Key.I => ToolKind.Eyedropper,

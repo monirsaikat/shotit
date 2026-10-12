@@ -27,6 +27,8 @@ public enum ToolKind
     Measure,
     Eyedropper,
     Crop,
+    RoundedRectangle,
+    Eraser,
 }
 
 [Flags]
@@ -51,7 +53,9 @@ public sealed record ToolOptions
     public string FontFamily { get; init; } = "Segoe UI";
     public double FontSize { get; init; } = 20;
     public bool Bold { get; init; } = true;
+    public bool Italic { get; init; }
     public bool TextBackground { get; init; }
+    public double CornerRadius { get; init; } = 12;
     public double BlurRadius { get; init; } = 12;
     public int PixelSize { get; init; } = 12;
     public string Sticker { get; init; } = "check";
@@ -60,7 +64,7 @@ public sealed record ToolOptions
 }
 
 /// <summary>Raised when the user should type text. The view shows an input box and calls CommitText.</summary>
-public sealed record TextEditRequest(Guid? TargetId, RectD Area, string InitialText, string FontFamily, double FontSize, bool Bold, ColorRgba Color);
+public sealed record TextEditRequest(Guid? TargetId, RectD Area, string InitialText, string FontFamily, double FontSize, bool Bold, ColorRgba Color, bool Italic = false);
 
 /// <summary>
 /// UI-independent editor: document state, undo history, selection and the pointer state machine of every tool.
@@ -101,6 +105,9 @@ public sealed class EditorSession
     public ToolKind Tool { get; private set; } = ToolKind.Select;
 
     public ToolOptions Options { get; private set; } = new();
+
+    /// <summary>Width divided by height that the crop rectangle is held to, or null for a free crop.</summary>
+    public double? CropAspect { get; set; }
 
     /// <summary>Restricts drawing to this area (the capture region while editing on the overlay).</summary>
     public RectD? ClipArea { get; set; }
@@ -260,12 +267,14 @@ public sealed class EditorSession
                 StrokeWidth = width ? o.StrokeWidth : x.StrokeWidth,
                 Dashed = dash ? o.Dashed : x.Dashed,
                 Fill = fill || (color && x.Fill is not null) ? (o.Filled ? o.Color.WithAlpha(x.Fill?.A ?? 70) : null) : x.Fill,
+                CornerRadius = x.Kind == ShapeKind.RoundedRectangle && old.CornerRadius != o.CornerRadius ? o.CornerRadius : x.CornerRadius,
             },
             TextAnnotation x => x with
             {
                 Color = color ? o.Color : x.Color,
                 FontSize = font ? o.FontSize : x.FontSize,
                 Bold = old.Bold != o.Bold ? o.Bold : x.Bold,
+                Italic = old.Italic != o.Italic ? o.Italic : x.Italic,
                 FontFamily = old.FontFamily != o.FontFamily ? o.FontFamily : x.FontFamily,
                 Background = old.TextBackground != o.TextBackground || color ? TextBackgroundFor(o) : x.Background,
             },
@@ -352,6 +361,56 @@ public sealed class EditorSession
 
     public void SendToBack() => Reorder(front: false);
 
+    /// <summary>Moves the selected annotations one step up in the stacking order.</summary>
+    public void BringForward() => Step(up: true);
+
+    /// <summary>Moves the selected annotations one step down in the stacking order.</summary>
+    public void SendBackward() => Step(up: false);
+
+    private void Step(bool up)
+    {
+        if (Selection.IsEmpty) return;
+        var items = State.Items.ToList();
+        if (up)
+        {
+            for (int i = items.Count - 2; i >= 0; i--)
+                if (Selection.Contains(items[i].Id) && !Selection.Contains(items[i + 1].Id)) (items[i], items[i + 1]) = (items[i + 1], items[i]);
+        }
+        else
+        {
+            for (int i = 1; i < items.Count; i++)
+                if (Selection.Contains(items[i].Id) && !Selection.Contains(items[i - 1].Id)) (items[i], items[i - 1]) = (items[i - 1], items[i]);
+        }
+
+        Apply(State with { Items = [.. items] });
+    }
+
+    /// <summary>Lines up the selected annotations. <paramref name="edge"/>: 0 left, 1 horizontal centre, 2 right, 3 top, 4 vertical middle, 5 bottom.</summary>
+    public void AlignSelected(int edge)
+    {
+        var picked = SelectedItems.ToList();
+        if (picked.Count < 2) return;
+        var all = RectD.FromPoints(picked.SelectMany(a => new[] { a.Bounds.TopLeft, new Vec2(a.Bounds.Right, a.Bounds.Bottom) }).ToList());
+        Apply(State with
+        {
+            Items = [.. State.Items.Select(a =>
+            {
+                if (!Selection.Contains(a.Id)) return a;
+                var b = a.Bounds;
+                var delta = edge switch
+                {
+                    0 => new Vec2(all.Left - b.Left, 0),
+                    1 => new Vec2(all.Center.X - b.Center.X, 0),
+                    2 => new Vec2(all.Right - b.Right, 0),
+                    3 => new Vec2(0, all.Top - b.Top),
+                    4 => new Vec2(0, all.Center.Y - b.Center.Y),
+                    _ => new Vec2(0, all.Bottom - b.Bottom),
+                };
+                return a.MoveBy(delta);
+            })],
+        });
+    }
+
     private void Reorder(bool front)
     {
         if (Selection.IsEmpty) return;
@@ -417,6 +476,7 @@ public sealed class EditorSession
         public DocState? StartState { get; init; }
         public List<Vec2> Path { get; } = [];
         public bool Moved { get; set; }
+        public double Tolerance { get; init; }
     }
 
     private enum DragKind
@@ -425,6 +485,7 @@ public sealed class EditorSession
         MoveSelection,
         MoveHandle,
         Crop,
+        Erase,
     }
 
     /// <summary>
@@ -479,7 +540,13 @@ public sealed class EditorSession
 
             case ToolKind.Text:
                 TextEditRequested?.Invoke(this, new TextEditRequest(
-                    null, new RectD(p.X, p.Y, 0, 0), string.Empty, Options.FontFamily, Options.FontSize, Options.Bold, Options.Color));
+                    null, new RectD(p.X, p.Y, 0, 0), string.Empty, Options.FontFamily, Options.FontSize, Options.Bold, Options.Color, Options.Italic));
+                return true;
+
+            case ToolKind.Eraser:
+                BeginGesture();
+                _drag = new Drag { Origin = p, Kind = DragKind.Erase, Tolerance = Math.Max(tolerance, 6) };
+                EraseAt(p, _drag.Tolerance);
                 return true;
 
             case ToolKind.Eyedropper:
@@ -500,6 +567,17 @@ public sealed class EditorSession
     public void PointerMove(Vec2 p, PointerModifiers mods)
     {
         if (_drag is not { } drag) return;
+        if (drag.Kind == DragKind.Erase)
+        {
+            // A fast drag jumps many pixels between events; walk the gap so no stroke is skipped.
+            var from = drag.Path.Count > 0 ? drag.Path[^1] : drag.Origin;
+            int steps = Math.Max(1, (int)Math.Ceiling(from.DistanceTo(p) / Math.Max(2, drag.Tolerance)));
+            for (int i = 1; i <= steps; i++) EraseAt(Vec2.Lerp(from, p, (double)i / steps), drag.Tolerance);
+            drag.Path.Clear();
+            drag.Path.Add(p);
+            return;
+        }
+
         if (!drag.Moved && p.DistanceTo(drag.Origin) < MinDragDistance) return;
         drag.Moved = true;
         bool shift = mods.HasFlag(PointerModifiers.Shift);
@@ -526,7 +604,7 @@ public sealed class EditorSession
             }
 
             case DragKind.Crop:
-                CropDraft = RectD.FromCorners(drag.Origin, shift ? GeometryMath.ConstrainSquare(drag.Origin, p) : p);
+                CropDraft = RectD.FromCorners(drag.Origin, CropAspect is { } aspect and > 0 ? ConstrainAspect(drag.Origin, p, aspect) : shift ? GeometryMath.ConstrainSquare(drag.Origin, p) : p);
                 RaiseChanged();
                 break;
 
@@ -549,6 +627,7 @@ public sealed class EditorSession
         {
             case DragKind.MoveSelection:
             case DragKind.MoveHandle:
+            case DragKind.Erase:
                 EndGesture();
                 break;
 
@@ -583,13 +662,49 @@ public sealed class EditorSession
         }
     }
 
-    /// <summary>Double-click: edit the text of a text or callout annotation.</summary>
+    /// <summary>The eraser removes whole pen and highlighter strokes it touches; other annotations are left alone.</summary>
+    private void EraseAt(Vec2 p, double tolerance)
+    {
+        var hit = State.Items.Where(a => a is FreehandAnnotation or HighlighterAnnotation && a.HitTest(p, tolerance)).Select(a => a.Id).ToList();
+        if (hit.Count == 0) return;
+        State = State.Remove(hit);
+        PruneSelection();
+        RaiseChanged();
+    }
+
+    private static Vec2 ConstrainAspect(Vec2 origin, Vec2 p, double aspect)
+    {
+        double dx = p.X - origin.X, dy = p.Y - origin.Y;
+        // Follow whichever direction the pointer has travelled further, relative to the wanted shape.
+        double w = Math.Max(Math.Abs(dx), Math.Abs(dy) * aspect);
+        double h = w / aspect;
+        return new Vec2(origin.X + (dx < 0 ? -w : w), origin.Y + (dy < 0 ? -h : h));
+    }
+
+    /// <summary>Double-click: edit the text of a text or callout annotation, or add a corner to a line.</summary>
     public bool PointerDoubleClick(Vec2 p, double tolerance)
     {
         switch (HitTest(p, tolerance))
         {
+            case LineAnnotation line when line.Points.Length >= 2:
+            {
+                // Insert the new corner into the segment that was clicked, turning the line into a polyline.
+                int best = 0;
+                double bestDistance = double.MaxValue;
+                for (int i = 0; i + 1 < line.Points.Length; i++)
+                {
+                    double d = GeometryMath.DistanceToSegment(p, line.Points[i], line.Points[i + 1]);
+                    if (d < bestDistance) (best, bestDistance) = (i, d);
+                }
+
+                Apply(State.Replace(line with { Points = line.Points.Insert(best + 1, p) }));
+                Selection = [line.Id];
+                RaiseChanged();
+                return true;
+            }
+
             case TextAnnotation t:
-                TextEditRequested?.Invoke(this, new TextEditRequest(t.Id, t.Bounds, t.Text, t.FontFamily, t.FontSize, t.Bold, t.Color));
+                TextEditRequested?.Invoke(this, new TextEditRequest(t.Id, t.Bounds, t.Text, t.FontFamily, t.FontSize, t.Bold, t.Color, t.Italic));
                 return true;
             case CalloutAnnotation c:
                 TextEditRequested?.Invoke(this, new TextEditRequest(c.Id, c.Box, c.Text, c.FontFamily, c.FontSize, false, c.TextColor));
@@ -638,6 +753,7 @@ public sealed class EditorSession
             FontFamily = request.FontFamily,
             FontSize = request.FontSize,
             Bold = request.Bold,
+            Italic = request.Italic,
             Color = request.Color,
             Background = TextBackgroundFor(Options),
         }));
@@ -658,10 +774,11 @@ public sealed class EditorSession
             ToolKind.Line => new LineAnnotation { Id = id, Points = [a, end], Color = o.Color, StrokeWidth = o.StrokeWidth, Dashed = o.Dashed },
             ToolKind.Measure => new MeasureAnnotation { Id = id, Start = a, End = end },
             ToolKind.Rectangle => new ShapeAnnotation { Id = id, Rect = rect, Kind = ShapeKind.Rectangle, Color = o.Color, StrokeWidth = o.StrokeWidth, Dashed = o.Dashed, Fill = o.Filled ? o.Color.WithAlpha(70) : null },
+            ToolKind.RoundedRectangle => new ShapeAnnotation { Id = id, Rect = rect, Kind = ShapeKind.RoundedRectangle, CornerRadius = o.CornerRadius, Color = o.Color, StrokeWidth = o.StrokeWidth, Dashed = o.Dashed, Fill = o.Filled ? o.Color.WithAlpha(70) : null },
             ToolKind.Ellipse => new ShapeAnnotation { Id = id, Rect = rect, Kind = ShapeKind.Ellipse, Color = o.Color, StrokeWidth = o.StrokeWidth, Dashed = o.Dashed, Fill = o.Filled ? o.Color.WithAlpha(70) : null },
             ToolKind.Pen => new FreehandAnnotation { Id = id, Points = shift ? [a, p] : [.. drag.Path], Color = o.Color, StrokeWidth = o.StrokeWidth },
             ToolKind.Highlighter => new HighlighterAnnotation { Id = id, Points = shift ? [a, new Vec2(p.X, a.Y)] : [.. drag.Path], Color = o.HighlightColor, StrokeWidth = o.HighlightWidth },
-            ToolKind.AreaHighlight => new AreaHighlightAnnotation { Id = id, Rect = rect, Color = o.HighlightColor },
+            ToolKind.AreaHighlight => new AreaHighlightAnnotation { Id = id, Rect = rect, Color = o.HighlightColor, Ellipse = mods.HasFlag(PointerModifiers.Alt) },
             ToolKind.Spotlight => new SpotlightAnnotation { Id = id, Rect = rect, DimOpacity = o.SpotlightDim, Ellipse = mods.HasFlag(PointerModifiers.Alt) },
             ToolKind.Blur => new BlurAnnotation { Id = id, Rect = rect, Radius = o.BlurRadius },
             ToolKind.Pixelate => new PixelateAnnotation { Id = id, Rect = rect, BlockSize = o.PixelSize },

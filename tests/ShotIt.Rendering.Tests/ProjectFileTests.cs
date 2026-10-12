@@ -60,9 +60,12 @@ public sealed class ProjectFileTests : IDisposable
     [Fact]
     public void EveryAnnotationTypeSurvivesARoundTrip()
     {
-        var document = FullDocument();
-        ProjectFile.Save(File(), document);
+        var original = FullDocument();
+        ProjectFile.Save(File(), original);
         var loaded = ProjectFile.Load(File());
+        // Redactions are painted into the stored image and are no longer objects; everything else survives as is.
+        var document = ProjectFile.BakeRedactions(original);
+        Assert.Equal(original.Items.Count - 1, document.Items.Count);
 
         Assert.Equal(document.Base.Size, loaded.Base.Size);
         Assert.Equal(document.Base.Data, loaded.Base.Data);
@@ -89,8 +92,26 @@ public sealed class ProjectFileTests : IDisposable
             var document = FullDocument();
             ProjectFile.Save(File(), document);
             var loaded = ProjectFile.Load(File());
-            Assert.Equal(DocumentRenderer.RenderFinal(document).Data, DocumentRenderer.RenderFinal(loaded).Data);
+            Assert.Equal(DocumentRenderer.RenderFinal(ProjectFile.BakeRedactions(document)).Data, DocumentRenderer.RenderFinal(loaded).Data);
         });
+    }
+
+    [Fact]
+    public void RedactedPixelsCannotBeRecoveredFromTheProject()
+    {
+        var secret = new PixelBuffer(40, 20);
+        secret.Fill(new ColorRgba(200, 30, 30));
+        var document = DocState.FromImage(secret).Add(new RedactAnnotation { Rect = new(10, 5, 20, 10), Color = ColorRgba.Black });
+        ProjectFile.Save(File(), document);
+        var loaded = ProjectFile.Load(File());
+
+        Assert.DoesNotContain(loaded.Items, i => i is RedactAnnotation);
+        Assert.Equal(ColorRgba.Black, loaded.Base.GetPixel(10, 5));
+        Assert.Equal(ColorRgba.Black, loaded.Base.GetPixel(29, 14));
+        Assert.Equal(new ColorRgba(200, 30, 30), loaded.Base.GetPixel(9, 5));
+        Assert.Equal(new ColorRgba(200, 30, 30), loaded.Base.GetPixel(30, 14));
+        // The document that was saved is not modified.
+        Assert.Equal(new ColorRgba(200, 30, 30), document.Base.GetPixel(15, 10));
     }
 
     [Fact]

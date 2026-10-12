@@ -81,7 +81,9 @@ public sealed class EditorWindow : Window
             imagePanel.Children.Add(button);
         }
 
-        ImageButton(Icons.Crop, "Crop (drag a rectangle)", () => _session.SetTool(ToolKind.Crop));
+        var cropButton = ToolPalette.MakeButton(Icons.Create(Icons.Crop), "Crop (C)");
+        cropButton.Click += (_, _) => ShowCropMenu(cropButton);
+        imagePanel.Children.Add(cropButton);
         ImageButton(Icons.Rotate, "Rotate 90° clockwise", () => TransformFlattened(ImageEffects.Rotate90));
         ImageButton(Icons.FlipH, "Flip horizontally", () => TransformFlattened(ImageEffects.FlipHorizontal));
         var frameButton = ToolPalette.MakeButton(Icons.Create(Icons.Frame), "Frame, background and watermark");
@@ -385,8 +387,12 @@ public sealed class EditorWindow : Window
                 case Key.D1 or Key.NumPad1: SetZoom(1); break;
                 case Key.OemPlus or Key.Add: StepZoom(1); break;
                 case Key.OemMinus or Key.Subtract: StepZoom(-1); break;
-                case Key.OemCloseBrackets: _session.BringToFront(); break;
-                case Key.OemOpenBrackets: _session.SendToBack(); break;
+                case Key.OemCloseBrackets:
+                    if (shift) _session.BringToFront(); else _session.BringForward();
+                    break;
+                case Key.OemOpenBrackets:
+                    if (shift) _session.SendToBack(); else _session.SendBackward();
+                    break;
                 default: handled = false; break;
             }
         }
@@ -398,7 +404,8 @@ public sealed class EditorWindow : Window
                 case Key.Escape:
                     if (_session.IsGestureActive || _session.Draft is not null || _session.CropDraft is not null) _session.CancelPointer();
                     else if (!_session.Selection.IsEmpty) _session.ClearSelection();
-                    else _session.SetTool(ToolKind.Select);
+                    else if (_session.Tool != ToolKind.Select) _session.SetTool(ToolKind.Select);
+                    else Close(); // nothing left to cancel: Esc closes the editor (it asks first when there are unsaved changes)
                     break;
                 case Key.Left or Key.Right or Key.Up or Key.Down:
                 {
@@ -407,7 +414,7 @@ public sealed class EditorWindow : Window
                     break;
                 }
                 default:
-                    if (Keyboard.Modifiers == ModifierKeys.None && ToolPalette.TryGetToolForKey(e.Key, out var tool)) _session.SetTool(tool);
+                    if (Keyboard.Modifiers == ModifierKeys.None && ToolPalette.TryGetToolForKey(e.Key, out var tool, allowCrop: true)) _session.SetTool(tool);
                     else handled = false;
                     break;
             }
@@ -471,6 +478,23 @@ public sealed class EditorWindow : Window
 
     /// <summary>Changes only the base image and keeps annotations editable.</summary>
     private void AdjustBase(Func<PixelBuffer, PixelBuffer> adjust) => _session.ReplaceBase(adjust(_session.State.Base));
+
+    private void ShowCropMenu(UIElement target)
+    {
+        var menu = new ContextMenu { PlacementTarget = target, Placement = PlacementMode.Bottom };
+        foreach (var (name, aspect) in new (string, double?)[] { ("Free", null), ("Square 1:1", 1), ("4:3", 4.0 / 3), ("3:2", 1.5), ("16:9", 16.0 / 9), ("9:16 (portrait)", 9.0 / 16) })
+        {
+            var item = new MenuItem { Header = "Crop: " + name, IsChecked = _session.Tool == ToolKind.Crop && _session.CropAspect == aspect };
+            item.Click += (_, _) =>
+            {
+                _session.CropAspect = aspect;
+                _session.SetTool(ToolKind.Crop);
+            };
+            menu.Items.Add(item);
+        }
+
+        menu.IsOpen = true;
+    }
 
     private void ShowImageMenu(UIElement target)
     {

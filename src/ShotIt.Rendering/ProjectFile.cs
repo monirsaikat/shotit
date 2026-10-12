@@ -58,6 +58,7 @@ public static class ProjectFile
             using (var file = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
             using (var zip = new ZipArchive(file, ZipArchiveMode.Create))
             {
+                document = BakeRedactions(document);
                 var manifest = new Manifest { Items = [.. document.Items], Canvas = document.Canvas, Watermark = document.Watermark };
                 using (var stream = zip.CreateEntry(DocumentEntry, CompressionLevel.Fastest).Open())
                     JsonSerializer.Serialize(stream, manifest, Json);
@@ -79,6 +80,29 @@ public static class ProjectFile
                 catch (IOException) { }
             }
         }
+    }
+
+    /// <summary>
+    /// A redaction promises that the covered pixels are gone. A project keeps the untouched base image,
+    /// so redactions are painted into a copy of it and dropped from the annotation list before saving:
+    /// nothing under a redaction can be recovered from the file.
+    /// </summary>
+    public static DocState BakeRedactions(DocState document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        if (!document.Items.Any(i => i is RedactAnnotation)) return document;
+        var image = document.Base.Clone();
+        foreach (var redact in document.Items.OfType<RedactAnnotation>())
+        {
+            int left = Math.Max(0, (int)Math.Floor(redact.Rect.Left)), top = Math.Max(0, (int)Math.Floor(redact.Rect.Top));
+            int right = Math.Min(image.Width, (int)Math.Ceiling(redact.Rect.Right)), bottom = Math.Min(image.Height, (int)Math.Ceiling(redact.Rect.Bottom));
+            var color = redact.Color.WithAlpha(255);
+            for (int y = top; y < bottom; y++)
+                for (int x = left; x < right; x++)
+                    image.SetPixel(x, y, color);
+        }
+
+        return document with { Base = image, Items = document.Items.RemoveAll(i => i is RedactAnnotation) };
     }
 
     /// <summary>Reads a project. Throws <see cref="InvalidDataException"/> when the file is not a usable project.</summary>

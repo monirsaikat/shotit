@@ -42,6 +42,10 @@ public sealed class CaptureActions
                         _app.Notifier.Info(notifyOnCopy, "The image is on the clipboard.");
                     break;
 
+                case OverlayAction.Save when _app.Settings.Output.AskWhereToSave:
+                    Run(result, OverlayAction.SaveAs, owner);
+                    break;
+
                 case OverlayAction.Save:
                 {
                     string? path = _app.Output.Save(result, out string? error);
