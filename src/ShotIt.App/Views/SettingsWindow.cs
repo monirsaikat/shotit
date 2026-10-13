@@ -173,7 +173,10 @@ public sealed class SettingsWindow : Window
         p.Children.Add(Ui.Row("Language", Ui.Combo(languages, _s.General.OcrLanguage, v => { _s.General.OcrLanguage = v; Changed(); }),
             languages.Count == 1
                 ? "No recognition language is installed. Add one in Windows Settings › Time & language › Language & region."
-                : "Text is recognised on this computer by Windows. Nothing is sent anywhere. More languages can be added in Windows Settings."));
+                : BengaliRecognizer.IsAvailable
+                    ? "Text is recognised on this computer. Nothing is sent anywhere. Automatic also finds Bengali (বাংলা), which ShotIt reads itself; "
+                      + "choosing one language skips that check and is a little faster. More languages can be added in Windows Settings."
+                    : "Text is recognised on this computer by Windows. Nothing is sent anywhere. More languages can be added in Windows Settings."));
     }
 
     // ------------------------------------------------------------------ Hotkeys
@@ -189,6 +192,9 @@ public sealed class SettingsWindow : Window
         AddHotkey(p, "Repeat last region", HotkeyAction.LastRegion, () => h.LastRegion, v => h.LastRegion = v);
         AddHotkey(p, "Capture freeform shape", HotkeyAction.Freeform, () => h.Freeform, v => h.Freeform = v);
         AddHotkey(p, "Capture after a delay", HotkeyAction.DelayedRegion, () => h.DelayedRegion, v => h.DelayedRegion = v);
+        AddHotkey(p, "Scrolling capture", HotkeyAction.Scrolling, () => h.Scrolling, v => h.Scrolling = v);
+        AddHotkey(p, "Record video (press again to stop)", HotkeyAction.RecordVideo, () => h.RecordVideo, v => h.RecordVideo = v);
+        AddHotkey(p, "Record GIF (press again to stop)", HotkeyAction.RecordGif, () => h.RecordGif, v => h.RecordGif = v);
         AddHotkey(p, "Show or hide pinned images", HotkeyAction.TogglePins, () => h.TogglePins, v => h.TogglePins = v);
         AddHotkey(p, "Pin the clipboard image", HotkeyAction.PinClipboard, () => h.PinClipboard, v => h.PinClipboard = v);
         AddHotkey(p, "Open history", HotkeyAction.OpenHistory, () => h.OpenHistory, v => h.OpenHistory = v);
@@ -227,7 +233,7 @@ public sealed class SettingsWindow : Window
         {
             (HotkeyAction.Region, _s.Hotkeys.Region), (HotkeyAction.Window, _s.Hotkeys.Window), (HotkeyAction.FullScreen, _s.Hotkeys.FullScreen),
             (HotkeyAction.ActiveWindow, _s.Hotkeys.ActiveWindow), (HotkeyAction.LastRegion, _s.Hotkeys.LastRegion), (HotkeyAction.Freeform, _s.Hotkeys.Freeform),
-            (HotkeyAction.DelayedRegion, _s.Hotkeys.DelayedRegion), (HotkeyAction.TogglePins, _s.Hotkeys.TogglePins),
+            (HotkeyAction.DelayedRegion, _s.Hotkeys.DelayedRegion), (HotkeyAction.Scrolling, _s.Hotkeys.Scrolling), (HotkeyAction.RecordVideo, _s.Hotkeys.RecordVideo), (HotkeyAction.RecordGif, _s.Hotkeys.RecordGif), (HotkeyAction.TogglePins, _s.Hotkeys.TogglePins),
             (HotkeyAction.PinClipboard, _s.Hotkeys.PinClipboard), (HotkeyAction.OpenHistory, _s.Hotkeys.OpenHistory),
         };
         foreach (var (action, status) in _hotkeyStatus)
@@ -288,6 +294,21 @@ public sealed class SettingsWindow : Window
         p.Children.Add(Ui.Row("Fixed-size region", Ui.Horizontal(
             Ui.Number(c.FixedWidth, 16, 16384, v => { c.FixedWidth = v; Changed(); }), Unit("×"),
             Ui.Number(c.FixedHeight, 16, 16384, v => { c.FixedHeight = v; Changed(); }), Unit("pixels"))));
+
+        p.Children.Add(Ui.Row("Longest scrolling capture", Ui.Horizontal(Ui.Number(c.ScrollMaxHeight, 1000, 60000, v => { c.ScrollMaxHeight = v; Changed(); }), Unit("pixels")),
+            "A scrolling capture stops by itself at the end of the page, or when the picture reaches this height."));
+
+        p.Children.Add(Ui.SubHeading("Recording"));
+        var r = _s.Recording;
+        p.Children.Add(Ui.Check("Show the mouse pointer in recordings", r.ShowPointer, v => { r.ShowPointer = v; Changed(); }));
+        p.Children.Add(Ui.Check("Mark mouse clicks with a ring", r.ShowClicks, v => { r.ShowClicks = v; Changed(); }));
+        p.Children.Add(Ui.Check("Show keyboard shortcuts as a caption", r.ShowKeys, v => { r.ShowKeys = v; Changed(); },
+            "Only shortcuts such as Ctrl+S and keys such as Enter are shown. Ordinary typing never is, so passwords stay out of the recording."));
+        p.Children.Add(Ui.Check("Open the video editor when a video recording finishes", r.EditAfterRecording, v => { r.EditAfterRecording = v; Changed(); }));
+        p.Children.Add(Ui.Row("Video smoothness", Ui.Horizontal(Ui.Number(r.VideoFramesPerSecond, 5, 60, v => { r.VideoFramesPerSecond = v; Changed(); }), Unit("pictures a second"))));
+        p.Children.Add(Ui.Row("GIF smoothness", Ui.Horizontal(Ui.Number(r.GifFramesPerSecond, 2, 30, v => { r.GifFramesPerSecond = v; Changed(); }), Unit("pictures a second")),
+            "A higher number is smoother and makes a larger file."));
+        p.Children.Add(Ui.Row("Longest recording", Ui.Horizontal(Ui.Number(r.MaxSeconds, 5, 3600, v => { r.MaxSeconds = v; Changed(); }), Unit("seconds"))));
 
         p.Children.Add(Ui.SubHeading("Advanced"));
         p.Children.Add(Ui.Row("Capture method", Ui.Combo(

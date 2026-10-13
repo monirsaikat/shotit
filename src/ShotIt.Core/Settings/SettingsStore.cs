@@ -114,6 +114,7 @@ public sealed class SettingsStore
         s.General ??= new();
         s.Hotkeys ??= new();
         s.Capture ??= new();
+        s.Recording ??= new();
         s.Output ??= new();
         s.Editor ??= new();
         s.History ??= new();
@@ -128,6 +129,10 @@ public sealed class SettingsStore
         s.Capture.DelaySeconds = Math.Clamp(s.Capture.DelaySeconds, 1, 30);
         s.Capture.FixedWidth = Math.Clamp(s.Capture.FixedWidth, 16, 16384);
         s.Capture.FixedHeight = Math.Clamp(s.Capture.FixedHeight, 16, 16384);
+        s.Recording.VideoFramesPerSecond = Math.Clamp(s.Recording.VideoFramesPerSecond, 5, 60);
+        s.Recording.GifFramesPerSecond = Math.Clamp(s.Recording.GifFramesPerSecond, 2, 30);
+        s.Recording.MaxSeconds = Math.Clamp(s.Recording.MaxSeconds, 5, 3600);
+        s.Capture.ScrollMaxHeight = Math.Clamp(s.Capture.ScrollMaxHeight, 1000, 60000);
         if (s.Capture.LastRegion is { Length: not 4 }) s.Capture.LastRegion = null;
         s.Output.JpegQuality = Math.Clamp(s.Output.JpegQuality, 10, 100);
         if (string.IsNullOrWhiteSpace(s.Output.FileNameTemplate)) s.Output.FileNameTemplate = new OutputSettings().FileNameTemplate;

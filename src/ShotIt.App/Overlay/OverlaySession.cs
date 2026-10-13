@@ -21,6 +21,19 @@ public enum OverlayMode
     Preselected,
 }
 
+/// <summary>What the selected region is for.</summary>
+public enum OverlayPurpose
+{
+    Capture,
+
+    /// <summary>A scrolling capture, which starts as soon as the region is selected.</summary>
+    Scrolling,
+
+    /// <summary>A recording, which starts as soon as the region is selected.</summary>
+    RecordVideo,
+    RecordGif,
+}
+
 public enum OverlayPhase
 {
     Selecting,
@@ -40,6 +53,11 @@ public enum OverlayAction
     SearchImage,
     Share,
     Print,
+
+    /// <summary>Scroll the selected area and capture everything it shows.</summary>
+    Scroll,
+    RecordVideo,
+    RecordGif,
     Cancel,
 }
 
@@ -103,6 +121,8 @@ public sealed class OverlaySession
     public BitmapSource Bitmap { get; }
     public MonitorTopology Topology => Frame.Topology;
     public OverlayMode Mode { get; }
+
+    public OverlayPurpose Purpose { get; init; }
     public SelectionModel Selection { get; }
     public EditorSession Editor { get; }
     public OverlayPhase Phase { get; private set; } = OverlayPhase.Selecting;

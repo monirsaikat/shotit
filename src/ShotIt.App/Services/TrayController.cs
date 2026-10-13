@@ -22,6 +22,11 @@ public sealed class TrayController : IDisposable
         ActiveWindow,
         Freeform,
         Delayed,
+        Scrolling,
+        RecordVideo,
+        RecordGif,
+        EditVideo,
+        EditLastVideo,
         LastRegion,
         FixedSize,
         OpenFile,
@@ -101,6 +106,9 @@ public sealed class TrayController : IDisposable
                 case HotkeyAction.ActiveWindow: _app.Controller.CaptureActiveWindow(); break;
                 case HotkeyAction.LastRegion: _app.Controller.RepeatLastRegion(); break;
                 case HotkeyAction.DelayedRegion: _app.Controller.StartDelayed(); break;
+                case HotkeyAction.Scrolling: _app.Controller.StartScrolling(); break;
+                case HotkeyAction.RecordVideo: _app.Controller.StartRecording(RecordingFormat.Video); break;
+                case HotkeyAction.RecordGif: _app.Controller.StartRecording(RecordingFormat.Gif); break;
                 case HotkeyAction.TogglePins: _app.Pins.ToggleAll(); break;
                 case HotkeyAction.OpenHistory: _openHistory(); break;
                 case HotkeyAction.PinClipboard: _app.PinClipboard(); break;
@@ -116,6 +124,9 @@ public sealed class TrayController : IDisposable
     {
         switch (kind)
         {
+            case TrayEvent.LeftClick when _app.Controller.IsRecording:
+                _app.Controller.StopRecording();
+                break;
             case TrayEvent.LeftClick:
                 // Give the click a moment to finish so the taskbar is not captured mid-animation.
                 _app.Dispatcher.BeginInvoke(() => _app.Controller.StartRegion(afterRegionOverride: AfterCaptureAction.ShowToolbar),
@@ -148,9 +159,15 @@ public sealed class TrayController : IDisposable
             new((int)Command.AllMonitors, "Capture all monitors"),
             new((int)Command.ActiveWindow, Label("Capture active window", keys.ActiveWindow)),
             new((int)Command.Freeform, Label("Capture freeform shape", keys.Freeform)),
+            new((int)Command.Scrolling, Label("Scrolling capture", keys.Scrolling)),
             new((int)Command.Delayed, Label(delayed, keys.DelayedRegion)),
             new((int)Command.LastRegion, Label("Repeat last region", keys.LastRegion)) { Enabled = capture.LastRegion is not null },
             new((int)Command.FixedSize, fixedSize),
+            MenuEntry.Separator,
+            new((int)Command.RecordVideo, Label("Record video (MP4)", keys.RecordVideo)),
+            new((int)Command.RecordGif, Label("Record GIF", keys.RecordGif)),
+            new((int)Command.EditLastVideo, "Edit last recording") { Enabled = _app.Controller.LastVideo is { } last && System.IO.File.Exists(last) },
+            new((int)Command.EditVideo, "Edit video…"),
             MenuEntry.Separator,
             new((int)Command.OpenFile, "Open image in editor…"),
             new((int)Command.EditClipboard, "Edit clipboard image"),
@@ -197,6 +214,13 @@ public sealed class TrayController : IDisposable
                 case Command.ActiveWindow: _app.Controller.CaptureActiveWindow(); break;
                 case Command.Freeform: _app.Controller.StartRegion(OverlayMode.Freeform); break;
                 case Command.Delayed: _app.Controller.StartDelayed(); break;
+                case Command.Scrolling: _app.Controller.StartScrolling(); break;
+                case Command.RecordVideo: _app.Controller.StartRecording(RecordingFormat.Video); break;
+                case Command.RecordGif: _app.Controller.StartRecording(RecordingFormat.Gif); break;
+                case Command.EditVideo: _app.BrowseAndEditVideo(); break;
+                case Command.EditLastVideo:
+                    if (_app.Controller.LastVideo is { } video) _ = _app.OpenVideoEditorAsync(video);
+                    break;
                 case Command.LastRegion: _app.Controller.RepeatLastRegion(); break;
                 case Command.FixedSize: _app.Controller.StartRegion(OverlayMode.FixedSize); break;
                 case Command.OpenFile: _app.BrowseAndEdit(); break;

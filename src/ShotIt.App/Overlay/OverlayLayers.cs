@@ -138,7 +138,7 @@ public sealed class OverlayLayer : FrameworkElement
         }
 
         if (ShowHint && session.Phase == OverlayPhase.Selecting && !session.IsDragging)
-            DrawHint(dc, full, session.Mode);
+            DrawHint(dc, full, session);
     }
 
     private static Rect Deflate(Rect r, double d) =>
@@ -180,9 +180,14 @@ public sealed class OverlayLayer : FrameworkElement
         dc.DrawText(formatted, new Point(x + 7, y + 3));
     }
 
-    private static void DrawHint(DrawingContext dc, Rect area, OverlayMode mode)
+    private static void DrawHint(DrawingContext dc, Rect area, OverlaySession session)
     {
-        string text = mode switch
+        string text = session.Purpose switch
+        {
+            OverlayPurpose.Scrolling => "Select the area that scrolls  ·  Click a window or pane to grab it  ·  Esc to cancel",
+            OverlayPurpose.RecordVideo or OverlayPurpose.RecordGif => "Select the area to record  ·  Click a window to grab it  ·  Esc to cancel",
+            _ => null,
+        } ?? session.Mode switch
         {
             OverlayMode.Freeform => "Draw around what you want to capture  ·  Esc to cancel",
             OverlayMode.Window => "Click a window to capture it  ·  Scroll to pick a part  ·  Esc to cancel",
@@ -287,7 +292,8 @@ public sealed class MagnifierView : FrameworkElement
 /// <summary>The row of capture actions shown under the region: copy, save, upload, pin and so on.</summary>
 public sealed class ActionBar : Border
 {
-    public ActionBar(Action<OverlayAction> invoke, bool includeEdit = true)
+    /// <param name="onScreen">True on the capture overlay, where the picture is still a live part of the screen.</param>
+    public ActionBar(Action<OverlayAction> invoke, bool includeEdit = true, bool onScreen = false)
     {
         ArgumentNullException.ThrowIfNull(invoke);
         Style = (Style)Application.Current.FindResource("BarPanel");
@@ -319,6 +325,13 @@ public sealed class ActionBar : Border
                 var item = new MenuItem { Header = header, InputGestureText = gesture ?? string.Empty };
                 item.Click += (_, _) => invoke(action);
                 menu.Items.Add(item);
+            }
+
+            if (onScreen)
+            {
+                Item("Scrolling capture of this area", OverlayAction.Scroll);
+                Item("Record this area as video (MP4)", OverlayAction.RecordVideo);
+                Item("Record this area as GIF", OverlayAction.RecordGif);
             }
 
             Item("Read QR code or barcode", OverlayAction.Qr);

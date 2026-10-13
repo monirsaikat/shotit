@@ -91,6 +91,9 @@ public enum HotkeyAction
     TogglePins,
     OpenHistory,
     PinClipboard,
+    Scrolling,
+    RecordVideo,
+    RecordGif,
 
     /// <summary>Registered only while a capture session is open, so Esc always works even without focus.</summary>
     SessionEscape = 100,
@@ -125,6 +128,9 @@ public sealed class HotkeyManager : IDisposable
         (HotkeyAction.LastRegion, s.LastRegion),
         (HotkeyAction.Freeform, s.Freeform),
         (HotkeyAction.DelayedRegion, s.DelayedRegion),
+        (HotkeyAction.Scrolling, s.Scrolling),
+        (HotkeyAction.RecordVideo, s.RecordVideo),
+        (HotkeyAction.RecordGif, s.RecordGif),
         (HotkeyAction.TogglePins, s.TogglePins),
         (HotkeyAction.OpenHistory, s.OpenHistory),
         (HotkeyAction.PinClipboard, s.PinClipboard),

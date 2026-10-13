@@ -10,7 +10,8 @@ using ZXing.Common;
 
 namespace ShotIt.Ocr;
 
-public sealed record RecognizedWord(string Text, RectD Bounds);
+/// <param name="Confidence">How sure the engine is, from 0 to 1. The Windows engine does not say, so its words are 1.</param>
+public sealed record RecognizedWord(string Text, RectD Bounds, double Confidence = 1);
 
 public sealed record RecognizedLine(string Text, IReadOnlyList<RecognizedWord> Words);
 
@@ -40,22 +41,26 @@ public sealed class OcrUnavailableException : Exception
 }
 
 /// <summary>
-/// Text recognition with the engine built into Windows. Everything runs on this computer:
-/// no image ever leaves the machine.
+/// Text recognition with the engine built into Windows, and with the engine inside ShotIt for
+/// Bengali, which Windows cannot read. Everything runs on this computer: no image ever leaves
+/// the machine.
 /// </summary>
 public static class TextRecognizer
 {
-    /// <summary>Languages that have a recognition pack installed in Windows.</summary>
+    /// <summary>Languages that can be read: those with a recognition pack installed in Windows, and Bengali.</summary>
     public static IReadOnlyList<OcrLanguage> AvailableLanguages()
     {
+        var languages = new List<OcrLanguage>();
         try
         {
-            return [.. OcrEngine.AvailableRecognizerLanguages.Select(l => new OcrLanguage(l.LanguageTag, l.DisplayName))];
+            languages.AddRange(OcrEngine.AvailableRecognizerLanguages.Select(l => new OcrLanguage(l.LanguageTag, l.DisplayName)));
         }
         catch (Exception)
         {
-            return [];
         }
+
+        if (BengaliRecognizer.IsAvailable) languages.Add(new OcrLanguage(BengaliRecognizer.Tag, BengaliRecognizer.DisplayName));
+        return languages;
     }
 
     private static OcrEngine CreateEngine(string? languageTag)
@@ -101,11 +106,44 @@ public static class TextRecognizer
         return (ImageEffects.Resize(image, w, h), (double)w / image.Width);
     }
 
-    /// <summary>Recognises text. Word bounds are returned in the coordinates of the original image.</summary>
+    /// <summary>
+    /// Recognises text. Word bounds are returned in the coordinates of the original image.
+    /// With no language given, Windows reads the image first and what it could not read is then
+    /// checked for Bengali; if there is any, the whole image is read as Bengali and English.
+    /// </summary>
     public static async Task<RecognizedText> RecognizeAsync(PixelBuffer image, string? languageTag = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(image);
         if (image.Width < 4 || image.Height < 4) return new RecognizedText(string.Empty, [], string.Empty);
+        if (BengaliRecognizer.Handles(languageTag)) return BengaliRecognizer.Recognize(image, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(languageTag) || !BengaliRecognizer.IsAvailable)
+            return await WindowsAsync(image, languageTag, cancellationToken).ConfigureAwait(false);
+
+        RecognizedText windows;
+        try
+        {
+            windows = await WindowsAsync(image, languageTag, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OcrUnavailableException)
+        {
+            // No Windows recognition language is installed: the engine inside ShotIt still reads English.
+            return BengaliRecognizer.Recognize(image, cancellationToken);
+        }
+
+        try
+        {
+            var read = windows.Lines.SelectMany(l => l.Words).ToList();
+            var rest = BengaliRecognizer.Glance(read.Count == 0 ? image : BengaliRecognizer.Without(image, read), cancellationToken);
+            return BengaliRecognizer.ContainsBengali(rest) ? BengaliRecognizer.Recognize(image, cancellationToken) : windows;
+        }
+        catch (OcrUnavailableException)
+        {
+            return windows;
+        }
+    }
+
+    private static async Task<RecognizedText> WindowsAsync(PixelBuffer image, string? languageTag, CancellationToken cancellationToken)
+    {
         var engine = CreateEngine(languageTag);
         var (prepared, scale) = Prepare(image, (int)OcrEngine.MaxImageDimension);
         cancellationToken.ThrowIfCancellationRequested();

@@ -108,6 +108,9 @@ public enum AppCommand
     CaptureActiveWindow,
     CaptureFreeform,
     CaptureDelayed,
+    CaptureScrolling,
+    RecordVideo,
+    RecordGif,
     EditFile,
     PinFile,
     OpenSettings,
@@ -142,8 +145,12 @@ public sealed record AppCommandLine(AppCommand Command, string? Argument = null,
                         "active" or "activewindow" => AppCommand.CaptureActiveWindow,
                         "freeform" => AppCommand.CaptureFreeform,
                         "delayed" => AppCommand.CaptureDelayed,
+                        "scrolling" or "scroll" => AppCommand.CaptureScrolling,
                         _ => AppCommand.CaptureRegion,
                     };
+                    break;
+                case "--record":
+                    command = string.Equals(Next(), "gif", StringComparison.OrdinalIgnoreCase) ? AppCommand.RecordGif : AppCommand.RecordVideo;
                     break;
                 case "--edit":
                     command = AppCommand.EditFile;

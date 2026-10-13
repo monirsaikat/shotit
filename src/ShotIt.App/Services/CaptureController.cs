@@ -23,6 +23,9 @@ public sealed class CaptureController
 {
     private static readonly TimeSpan SessionTimeout = TimeSpan.FromMinutes(10);
 
+    /// <summary>Largest scrolling capture in pixels (about 256 MB of BGRA), whatever the height limit in settings.</summary>
+    private const int MaxScrollPixels = 64_000_000;
+
     private readonly AppServices _app;
     private readonly ILogger _log;
     private readonly List<OverlayWindow> _windows = [];
@@ -32,6 +35,8 @@ public sealed class CaptureController
     private MonitorTopology? _windowTopology;
     private OverlaySession? _session;
     private CountdownWindow? _countdown;
+    private ScrollCaptureSession? _scroll;
+    private RecordingSession? _recording;
 
     public CaptureController(AppServices app)
     {
@@ -43,7 +48,12 @@ public sealed class CaptureController
         _focusCheck.Tick += (_, _) => OnFocusCheck();
     }
 
-    public bool IsSessionActive => _session is not null;
+    public bool IsSessionActive => _session is not null || _scroll is not null || _recording is not null;
+
+    public bool IsRecording => _recording is not null;
+
+    /// <summary>The most recent video recorded since ShotIt started, if it is still there.</summary>
+    public string? LastVideo { get; private set; }
 
     /// <summary>The session in progress, for the self-test.</summary>
     internal OverlaySession? CurrentSession => _session;
@@ -111,8 +121,9 @@ public sealed class CaptureController
     // ------------------------------------------------------------------ starting a session
 
     public void StartRegion(OverlayMode mode = OverlayMode.Region, PixelRect? preselect = null,
-        AfterCaptureAction? afterRegionOverride = null)
+        AfterCaptureAction? afterRegionOverride = null, OverlayPurpose purpose = OverlayPurpose.Capture)
     {
+        if (_scroll is not null || _recording is not null) return;
         if (_session is not null)
         {
             // Pressing the hotkey again while the overlay is open just brings it back to the front.
@@ -144,7 +155,7 @@ public sealed class CaptureController
                     settings.Capture.FixedWidth, settings.Capture.FixedHeight).MoveInside(monitor.Bounds);
             }
 
-            var session = new OverlaySession(frame, snap, settings, mode, preselect, afterRegionOverride);
+            var session = new OverlaySession(frame, snap, settings, mode, preselect, afterRegionOverride) { Purpose = purpose };
             session.ActionRequested += OnAction;
             session.SelectionCompleted += OnSelectionCompleted;
             EnsureWindows(frame.Topology);
@@ -184,7 +195,7 @@ public sealed class CaptureController
 
     public void StartDelayed()
     {
-        if (_session is not null || _countdown is not null) return;
+        if (IsSessionActive || _countdown is not null) return;
         var countdown = new CountdownWindow(_app.Settings.Capture.DelaySeconds);
         _countdown = countdown;
         countdown.Finished += () =>
@@ -210,6 +221,7 @@ public sealed class CaptureController
 
     public void RepeatLastRegion()
     {
+        if (_scroll is not null || _recording is not null) return;
         if (_app.Settings.Capture.LastRegion is not { Length: 4 } r)
         {
             StartRegion();
@@ -234,7 +246,7 @@ public sealed class CaptureController
 
     public void CaptureFullScreen(bool allMonitors, bool viaFullScreenApp = false)
     {
-        if (_session is not null) return;
+        if (IsSessionActive) return;
         CaptureDirect(() =>
         {
             _app.CaptureService.Preference = _app.Settings.Capture.Backend;
@@ -246,7 +258,7 @@ public sealed class CaptureController
 
     public void CaptureActiveWindow()
     {
-        if (_session is not null) return;
+        if (IsSessionActive) return;
         CaptureDirect(() =>
         {
             nint foreground = WindowList.GetForeground();
@@ -275,6 +287,196 @@ public sealed class CaptureController
         }
     }
 
+    // ------------------------------------------------------------------ scrolling capture
+
+    /// <summary>Asks for the area that scrolls, then scrolls it to the end and joins everything it showed.</summary>
+    public void StartScrolling()
+    {
+        if (IsSessionActive) return;
+        // Any action other than the toolbar makes the session report the region as soon as it is selected.
+        StartRegion(OverlayMode.Region, afterRegionOverride: AfterCaptureAction.Copy, purpose: OverlayPurpose.Scrolling);
+    }
+
+    private (string App, string Title) DescribeSource(PixelRect region)
+    {
+        if (WindowList.DescribeWindow(WindowList.GetForeground()) is { } window && window.Bounds.Contains(region.Center))
+            return (WindowList.GetProcessName(window.ProcessId), window.Title);
+        return (string.Empty, string.Empty);
+    }
+
+    /// <summary>Scrolls the given part of the screen and delivers the joined picture like any other capture.</summary>
+    internal async Task StartScrollingAt(PixelRect area)
+    {
+        if (IsSessionActive) return;
+        var topology = Monitors.GetTopology();
+        var region = area.Intersect(topology.VirtualBounds);
+        if (region.Width < 32 || region.Height < 64)
+        {
+            _app.Notifier.Warn("Area too small", "A scrolling capture needs an area at least 64 pixels high.");
+            return;
+        }
+
+        var (sourceApp, sourceTitle) = DescribeSource(region);
+        var scroll = new ScrollCaptureSession(region, topology.FromPoint(region.Center));
+        _scroll = scroll;
+        ScrollCaptureResult result;
+        try
+        {
+            scroll.Show();
+            _app.Hotkeys.RegisterSessionEscape();
+            int limit = Math.Min(_app.Settings.Capture.ScrollMaxHeight, MaxScrollPixels / region.Width);
+            result = await scroll.RunAsync(new ScrollCaptureOptions
+            {
+                MaxHeight = Math.Max(region.Height, limit),
+                Trace = line => _log.Debug("Scrolling capture {Step}", line),
+            });
+        }
+        catch (Exception ex)
+        {
+            _log.Error(ex, "Scrolling capture failed");
+            _app.Notifier.Warn("Capture failed", "ShotIt could not finish the scrolling capture. Details are in the log file.");
+            return;
+        }
+        finally
+        {
+            scroll.Close();
+            _scroll = null;
+            _app.Hotkeys.UnregisterSessionEscape();
+        }
+
+        if (scroll.Cancelled)
+        {
+            _log.Information("Scrolling capture cancelled");
+            return;
+        }
+
+        _log.Information("Scrolling capture: {Frames} picture(s), {Width}x{Height}, ended with {Reason} ({Interruption})",
+            result.Frames, result.Image.Width, result.Image.Height, result.Reason, scroll.Interruption ?? "not interrupted");
+        switch (result.Reason)
+        {
+            case ScrollStopReason.NothingScrolled:
+                _app.Notifier.Warn("Nothing scrolled", "The area did not move, so this is an ordinary capture. Select the part of the window that scrolls. Windows running as administrator cannot be scrolled.");
+                break;
+            case ScrollStopReason.LostTrack:
+                _app.Notifier.Warn("Scrolling capture stopped early", "The content changed in a way ShotIt could not follow, so the picture ends there.");
+                break;
+            case ScrollStopReason.HeightLimit:
+                _app.Notifier.Info("Scrolling capture reached its limit", "The picture was stopped at its longest allowed height. The limit can be raised in Settings › Capture.");
+                break;
+        }
+
+        try
+        {
+            _app.Settings.Capture.LastRegion = [region.X, region.Y, region.Width, region.Height];
+            _app.SaveSettingsSoon();
+            var after = _app.Settings.Capture.AfterRegion;
+            var action = after == AfterCaptureAction.ShowToolbar ? OverlayAction.Edit : OverlaySession.Map(after);
+            _app.Actions.Run(new CaptureResult(DocState.FromImage(result.Image), sourceApp, sourceTitle, region), action,
+                notifyOnCopy: "Scrolling capture finished");
+        }
+        catch (Exception ex)
+        {
+            _log.Error(ex, "Completing the scrolling capture failed");
+            _app.Notifier.Warn("Capture failed", "ShotIt could not finish the scrolling capture. Details are in the log file.");
+        }
+    }
+
+    // ------------------------------------------------------------------ recording
+
+    /// <summary>Asks for the area to record and starts recording it. While a recording is running, stops it instead.</summary>
+    public void StartRecording(RecordingFormat format)
+    {
+        if (_recording is not null)
+        {
+            StopRecording();
+            return;
+        }
+
+        if (IsSessionActive) return;
+        StartRegion(OverlayMode.Region, afterRegionOverride: AfterCaptureAction.Copy,
+            purpose: format == RecordingFormat.Gif ? OverlayPurpose.RecordGif : OverlayPurpose.RecordVideo);
+    }
+
+    /// <summary>Ends the recording in progress and keeps the file.</summary>
+    public void StopRecording() => _recording?.Finish();
+
+    /// <summary>Ends the recording in progress and throws the file away.</summary>
+    internal void CancelRecording() => _recording?.Cancel();
+
+    /// <summary>Records the given part of the screen until stopped, then saves the file and says where it is.</summary>
+    internal async Task StartRecordingAt(PixelRect area, RecordingFormat format)
+    {
+        if (IsSessionActive) return;
+        var topology = Monitors.GetTopology();
+        var region = area.Intersect(topology.VirtualBounds);
+        if (region.Width < 32 || region.Height < 32)
+        {
+            _app.Notifier.Warn("Area too small", "A recording needs an area of at least 32 by 32 pixels.");
+            return;
+        }
+
+        RecordingSession recording;
+        RecordingResult result;
+        try
+        {
+            var (sourceApp, sourceTitle) = DescribeSource(region);
+            string path = _app.Output.NewRecordingPath(format == RecordingFormat.Gif ? ".gif" : ".mp4", sourceApp, sourceTitle, region.Size);
+            recording = new RecordingSession(region, topology.FromPoint(region.Center), _app.Settings.Recording, format, path);
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            _log.Warning(ex, "Preparing a recording failed");
+            _app.Notifier.Warn("Could not record", $"The recording could not be saved to “{_app.Output.SaveFolder}”. Choose another folder in Settings › Output.");
+            return;
+        }
+
+        _recording = recording;
+        try
+        {
+            recording.Show();
+            _app.Hotkeys.RegisterSessionEscape();
+            result = await recording.RunAsync();
+        }
+        catch (RecordingUnavailableException ex)
+        {
+            _log.Warning(ex, "Recording is not available");
+            _app.Notifier.Warn("Could not record", ex.Message);
+            return;
+        }
+        catch (Exception ex)
+        {
+            _log.Error(ex, "Recording failed");
+            _app.Notifier.Warn("Recording failed", "ShotIt could not finish the recording. Details are in the log file.");
+            return;
+        }
+        finally
+        {
+            recording.Close();
+            _recording = null;
+            _app.Hotkeys.UnregisterSessionEscape();
+        }
+
+        if (recording.Cancelled)
+        {
+            _log.Information("Recording cancelled");
+            return;
+        }
+
+        _log.Information("Recording saved: {Format}, {Width}x{Height}, {Seconds:0.0} s, {Frames} frame(s)",
+            format, region.Width, region.Height, result.Duration.TotalSeconds, result.Frames);
+        string file = System.IO.Path.GetFileName(recording.Path);
+        string length = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{(int)result.Duration.TotalMinutes}:{result.Duration.Seconds:00}");
+        bool copied = ClipboardService.SetFile(recording.Path);
+        string detail = $"{file}  ·  {length}" + (copied ? "  ·  the file is on the clipboard" : string.Empty)
+            + (result.ReachedLimit ? "  ·  stopped at the longest recording allowed in Settings › Capture" : string.Empty);
+        _app.Notifier.Info("Recording saved", detail, () => CaptureActions.RevealInExplorer(recording.Path));
+        if (format == RecordingFormat.Video)
+        {
+            LastVideo = recording.Path;
+            if (_app.Settings.Recording.EditAfterRecording) _ = _app.OpenVideoEditorAsync(recording.Path);
+        }
+    }
+
     // ------------------------------------------------------------------ during a session
 
     private void OnToolOptionsChanged(ToolOptions options)
@@ -293,6 +495,19 @@ public sealed class CaptureController
     /// <summary>Esc from the session-wide hotkey: cancels the innermost thing in progress.</summary>
     public void HandleEscape()
     {
+        if (_scroll is not null)
+        {
+            // Esc ends the scrolling and keeps the picture so far; the panel's Cancel button discards it.
+            _scroll.Finish();
+            return;
+        }
+
+        if (_recording is not null)
+        {
+            _recording.Finish();
+            return;
+        }
+
         if (_session is null)
         {
             _app.Hotkeys.UnregisterSessionEscape();
@@ -327,6 +542,9 @@ public sealed class CaptureController
 
     public void CancelSession(string reason)
     {
+        _scroll?.Cancel();
+        // A recording is worth keeping whatever interrupted it.
+        _recording?.Finish();
         if (_session is null)
         {
             CloseCountdown();
@@ -382,6 +600,27 @@ public sealed class CaptureController
         if (action == OverlayAction.Cancel)
         {
             EndSession();
+            return;
+        }
+
+        var purpose = action switch
+        {
+            OverlayAction.Scroll => OverlayPurpose.Scrolling,
+            OverlayAction.RecordVideo => OverlayPurpose.RecordVideo,
+            OverlayAction.RecordGif => OverlayPurpose.RecordGif,
+            _ => session.Purpose,
+        };
+        if (purpose != OverlayPurpose.Capture)
+        {
+            if (session.Selection.Current is not { IsEmpty: false } area) return;
+            EndSession();
+            // Let the overlay leave the screen before the area is photographed.
+            _app.Dispatcher.BeginInvoke(() => _ = purpose switch
+            {
+                OverlayPurpose.Scrolling => StartScrollingAt(area),
+                OverlayPurpose.RecordGif => StartRecordingAt(area, RecordingFormat.Gif),
+                _ => StartRecordingAt(area, RecordingFormat.Video),
+            }, DispatcherPriority.ApplicationIdle);
             return;
         }
 

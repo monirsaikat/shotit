@@ -55,6 +55,14 @@ public static class ClipboardService
         return Retry(() => Clipboard.SetDataObject(data, copy: true));
     }
 
+    /// <summary>Puts a file on the clipboard, ready to paste into a folder, a chat or an e-mail.</summary>
+    public static bool SetFile(string path)
+    {
+        var data = new DataObject();
+        data.SetFileDropList(new StringCollection { path });
+        return Retry(() => Clipboard.SetDataObject(data, copy: true));
+    }
+
     public static bool SetText(string text) =>
         Retry(() => Clipboard.SetDataObject(text ?? string.Empty, copy: true));
 

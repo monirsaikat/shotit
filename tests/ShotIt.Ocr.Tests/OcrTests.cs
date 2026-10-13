@@ -30,7 +30,7 @@ internal static class TestImages
     }
 
     /// <summary>Draws lines of text the way a screenshot of a document would look.</summary>
-    public static PixelBuffer Text(string[] lines, double fontSize = 20, bool dark = false, int width = 640) => OnSta(() =>
+    public static PixelBuffer Text(string[] lines, double fontSize = 20, bool dark = false, int width = 640, string font = "Segoe UI") => OnSta(() =>
     {
         int height = (int)(lines.Length * fontSize * 1.8 + 40);
         var visual = new DrawingVisual();
@@ -40,7 +40,7 @@ internal static class TestImages
             double y = 20;
             foreach (string line in lines)
             {
-                var text = new FormattedText(line, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), fontSize, dark ? Brushes.White : Brushes.Black, 1.0);
+                var text = new FormattedText(line, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface(font), fontSize, dark ? Brushes.White : Brushes.Black, 1.0);
                 dc.DrawText(text, new Point(20, y));
                 y += fontSize * 1.8;
             }
@@ -65,7 +65,7 @@ internal static class TestImages
 
 public class TextRecognizerTests
 {
-    private static bool HasEngine => TextRecognizer.AvailableLanguages().Count > 0;
+    private static bool HasEngine => TextRecognizer.AvailableLanguages().Any(l => !BengaliRecognizer.Handles(l.Tag));
 
     private static string Normalize(string text) => new(text.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 

@@ -79,6 +79,15 @@ public sealed class OutputService
         _settings.Output.FileNameTemplate,
         new FileNameContext(result.CapturedAt, result.SourceApp, result.SourceTitle, result.Image.Width, result.Image.Height, Interlocked.Increment(ref _counter)));
 
+    /// <summary>Picks an unused path in the save folder for a recording, named by the same template as pictures.</summary>
+    public string NewRecordingPath(string extension, string sourceApp, string sourceTitle, PixelSize size)
+    {
+        Directory.CreateDirectory(SaveFolder);
+        string name = FileNameTemplate.Expand(_settings.Output.FileNameTemplate,
+            new FileNameContext(DateTime.Now, sourceApp, sourceTitle, size.Width, size.Height, Interlocked.Increment(ref _counter)));
+        return FileNameTemplate.MakeUniquePath(SaveFolder, name, extension);
+    }
+
     public string SaveFolder => string.IsNullOrWhiteSpace(_settings.Output.SaveFolder) ? AppPaths.DefaultSaveFolder : _settings.Output.SaveFolder;
 
     /// <summary>Copies the image to the clipboard and records it in the library.</summary>

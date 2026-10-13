@@ -159,6 +159,9 @@ public partial class App : Application
                 case AppCommand.CaptureFullScreen: services.Controller.CaptureFullScreen(allMonitors: false); break;
                 case AppCommand.CaptureActiveWindow: services.Controller.CaptureActiveWindow(); break;
                 case AppCommand.CaptureDelayed: services.Controller.StartDelayed(); break;
+                case AppCommand.CaptureScrolling: services.Controller.StartScrolling(); break;
+                case AppCommand.RecordVideo: services.Controller.StartRecording(RecordingFormat.Video); break;
+                case AppCommand.RecordGif: services.Controller.StartRecording(RecordingFormat.Gif); break;
                 case AppCommand.EditFile:
                     if (command.Argument is { Length: > 0 } file) services.OpenEditorForFile(file);
                     else services.BrowseAndEdit();

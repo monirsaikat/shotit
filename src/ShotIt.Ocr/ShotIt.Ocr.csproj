@@ -5,8 +5,19 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="ZXing.Net" />
+    <PackageReference Include="Tesseract" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ShotIt.Core\ShotIt.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Language data for the bundled Bengali recognition (Tesseract "fast" models, Apache 2.0). -->
+    <None Include="tessdata\*.traineddata" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <!-- ShotIt is never built for 32-bit processors, so that copy of the engine is left out. -->
+  <Target Name="DropUnusedRecognitionEngine" BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <None Remove="@(None)" Condition="$([System.String]::Copy('%(None.Link)').StartsWith('x86\'))" />
+    </ItemGroup>
+  </Target>
 </Project>

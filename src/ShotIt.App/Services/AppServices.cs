@@ -7,6 +7,7 @@ using ShotIt.App.Editing;
 using ShotIt.App.Infrastructure;
 using ShotIt.App.Overlay;
 using ShotIt.App.Pins;
+using ShotIt.App.Views;
 using ShotIt.Capture;
 using ShotIt.Core.Editing;
 using ShotIt.Core.History;
@@ -213,9 +214,50 @@ public sealed class AppServices : IDisposable
         return window;
     }
 
+    private static readonly string[] VideoExtensions = [".mp4", ".m4v", ".mov", ".wmv", ".avi", ".mkv", ".webm"];
+
+    public static bool IsVideoFile(string path) =>
+        VideoExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Opens a video in the video editor. Reports unreadable files instead of throwing.</summary>
+    public async Task<VideoEditorWindow?> OpenVideoEditorAsync(string path)
+    {
+        try
+        {
+            var info = await VideoEditor.ProbeAsync(path);
+            var window = Track(new VideoEditorWindow(this, path, info));
+            window.Show();
+            window.Activate();
+            return window;
+        }
+        catch (VideoEditException ex)
+        {
+            Log.Information("Could not open {Path}: {Message}", path, ex.Message);
+            Notifier.Warn("Could not open the video", ex.Message);
+            return null;
+        }
+    }
+
+    public void BrowseAndEditVideo()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Open video",
+            Filter = "Videos|*.mp4;*.m4v;*.mov;*.wmv;*.avi;*.mkv;*.webm|All files|*.*",
+            InitialDirectory = Directory.Exists(Output.SaveFolder) ? Output.SaveFolder : string.Empty,
+        };
+        if (dialog.ShowDialog() == true) _ = OpenVideoEditorAsync(dialog.FileName);
+    }
+
     /// <summary>Opens an image file in the editor. Reports unreadable files instead of throwing.</summary>
     public EditorWindow? OpenEditorForFile(string path)
     {
+        if (IsVideoFile(path))
+        {
+            _ = OpenVideoEditorAsync(path);
+            return null;
+        }
+
         try
         {
             var image = ImageCodec.DecodeFile(path);

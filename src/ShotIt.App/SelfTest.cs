@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -17,6 +18,7 @@ using ShotIt.Core.Geometry;
 using ShotIt.Core.Imaging;
 using ShotIt.Core.Settings;
 using ShotIt.Native;
+using ShotIt.Ocr;
 using ShotIt.Rendering;
 using ShotIt.Shell;
 
@@ -91,6 +93,10 @@ internal static class SelfTest
                     case "editor": await Editor(services, report, output); break;
                     case "windows": await Windows(services, report, output); break;
                     case "capture": await RealCapture(services, report); break;
+                    case "scroll": await Scrolling(services, report, output); break;
+                    case "record": await Recording(services, report, output); break;
+                    case "video": await VideoEditing(services, report, output); break;
+                    case "ocr": await TextReading(report, output); break;
                     case "policy": await Policy(services, report, output); break;
                     default: report.Failures.Add("Unknown scenario: " + scenario); break;
                 }
@@ -686,6 +692,377 @@ internal static class SelfTest
         report.Check(app.Updates.Describe().Contains("organisation", StringComparison.Ordinal), "The About page does not explain why updates are off: " + app.Updates.Describe());
         string status = await app.Updates.CheckAndDownloadAsync(userInitiated: true);
         report.Check(status.Contains("organisation", StringComparison.Ordinal), "A manual update check ignores the policy: " + status);
+    }
+
+    /// <summary>
+    /// Scrolls a real window from top to bottom through the same path the user takes (pointer, mouse wheel,
+    /// screen capture) and checks that the joined picture is the whole page.
+    /// </summary>
+    private static async Task Scrolling(AppServices app, Report report, string output)
+    {
+        const int PageWidth = 600, PageHeight = 3000;
+        var random = new Random(7);
+        var page = new PixelBuffer(PageWidth, PageHeight);
+        page.Fill(ColorRgba.White);
+        for (int y = 6; y + 12 < PageHeight; y += 20)
+        {
+            int indent = random.Next(0, 150), length = random.Next(200, PageWidth - indent);
+            for (int row = y; row < y + 12; row++)
+                for (int x = indent; x < indent + length; x++)
+                    if (random.Next(3) == 0) page.SetPixel(x, row, new ColorRgba((byte)random.Next(90), (byte)random.Next(90), (byte)random.Next(90)));
+        }
+
+        var picture = new System.Windows.Controls.Image { Source = page.ToCachedBitmap(), Stretch = Stretch.None, Width = PageWidth, Height = PageHeight, HorizontalAlignment = HorizontalAlignment.Left };
+        RenderOptions.SetBitmapScalingMode(picture, BitmapScalingMode.NearestNeighbor);
+        var viewer = new System.Windows.Controls.ScrollViewer
+        {
+            Content = picture,
+            VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Visible,
+            Background = Brushes.White,
+        };
+        var window = new Window
+        {
+            WindowStyle = WindowStyle.None,
+            ResizeMode = ResizeMode.NoResize,
+            Topmost = true,
+            ShowInTaskbar = false,
+            UseLayoutRounding = true,
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = SystemParameters.WorkArea.Left + 80,
+            Top = SystemParameters.WorkArea.Top + 60,
+            Width = PageWidth + 40,
+            Height = 480,
+            Content = viewer,
+        };
+        window.Show();
+        window.Activate();
+        await Settle(600);
+
+        try
+        {
+            double scale = VisualTreeHelper.GetDpi(window).DpiScaleY;
+            var corner = viewer.PointToScreen(new Point(0, 0));
+            var area = new PixelRect((int)Math.Round(corner.X), (int)Math.Round(corner.Y),
+                (int)Math.Round(viewer.ActualWidth * scale), (int)Math.Round(viewer.ActualHeight * scale));
+            var parked = new PixelPoint(area.X + area.Width / 2, area.Y + area.Height * 4 / 5);
+
+            app.Settings.Capture.AfterRegion = AfterCaptureAction.Save;
+            var watch = Stopwatch.StartNew();
+            await app.Controller.StartScrollingAt(area);
+            watch.Stop();
+            await Settle(400);
+
+            report.Values["scrollMs"] = Math.Round(watch.Elapsed.TotalMilliseconds);
+            report.Values["dpiScale"] = scale;
+            report.Check(!app.Controller.IsSessionActive, "The scrolling capture did not end");
+            report.Check(Math.Abs(viewer.VerticalOffset - viewer.ScrollableHeight) < 1, $"The window was scrolled to {viewer.VerticalOffset:0} of {viewer.ScrollableHeight:0}");
+            report.Check(Monitors.GetCursorPosition() != parked, "The mouse pointer was left where the capture parked it");
+
+            string saved = app.Settings.Output.SaveFolder;
+            var files = Directory.Exists(saved) ? Directory.GetFiles(saved, "*.png") : [];
+            report.Check(files.Length == 1, $"Expected one saved file, found {files.Length}");
+            if (files.Length != 1) return;
+
+            var image = ImageCodec.DecodeFile(files[0]);
+            File.Copy(files[0], Path.Combine(output, "scrolling-capture.png"), overwrite: true);
+            int expected = (int)Math.Round(PageHeight * scale);
+            report.Values["size"] = $"{image.Width}x{image.Height}";
+            report.Check(image.Width == area.Width, $"The picture is {image.Width} wide, expected {area.Width}");
+            report.Check(Math.Abs(image.Height - expected) <= 2, $"The picture is {image.Height} high, expected {expected}");
+
+            // At 100% scaling the window shows the page pixel for pixel, so the join can be checked exactly.
+            if (scale == 1.0 && image.Height == PageHeight)
+            {
+                int wrong = 0;
+                for (int y = 0; y < PageHeight; y++)
+                    if (!image.Row(y)[..(PageWidth * 4)].SequenceEqual(page.Row(y))) wrong++;
+                report.Values["rowsWrong"] = wrong;
+                report.Check(wrong == 0, $"{wrong} of {PageHeight} rows of the joined picture differ from the page");
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// Records a window with something moving in it, once as a GIF and once as a video, through the same
+    /// path the user takes, and checks that both files play back at the right size and length.
+    /// </summary>
+    private static async Task Recording(AppServices app, Report report, string output)
+    {
+        var box = new System.Windows.Shapes.Rectangle { Width = 60, Height = 60, Fill = Brushes.OrangeRed };
+        var canvas = new System.Windows.Controls.Canvas { Background = Brushes.WhiteSmoke };
+        canvas.Children.Add(box);
+        System.Windows.Controls.Canvas.SetTop(box, 90);
+        var window = new Window
+        {
+            WindowStyle = WindowStyle.None,
+            ResizeMode = ResizeMode.NoResize,
+            Topmost = true,
+            ShowInTaskbar = false,
+            ShowActivated = false,
+            UseLayoutRounding = true,
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = SystemParameters.WorkArea.Left + 80,
+            Top = SystemParameters.WorkArea.Top + 60,
+            Width = 401,
+            Height = 241,
+            Content = canvas,
+        };
+        int step = 0;
+        var mover = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
+        mover.Tick += (_, _) => System.Windows.Controls.Canvas.SetLeft(box, step++ * 6 % 340);
+        window.Show();
+        mover.Start();
+        await Settle(500);
+
+        try
+        {
+            double scale = VisualTreeHelper.GetDpi(window).DpiScaleY;
+            var corner = canvas.PointToScreen(new Point(0, 0));
+            var area = new PixelRect((int)Math.Round(corner.X), (int)Math.Round(corner.Y),
+                (int)Math.Round(canvas.ActualWidth * scale), (int)Math.Round(canvas.ActualHeight * scale));
+            string saved = app.Settings.Output.SaveFolder;
+
+            foreach (var format in new[] { RecordingFormat.Gif, RecordingFormat.Video })
+            {
+                app.Notifier.Reset();
+                var running = app.Controller.StartRecordingAt(area, format);
+                await Settle(300);
+                report.Check(app.Controller.IsRecording, $"{format}: the recording did not start");
+                await Settle(1700);
+                app.Controller.HandleEscape();
+                await running;
+                report.Check(!app.Controller.IsSessionActive, $"{format}: the recording did not end");
+
+                string extension = format == RecordingFormat.Gif ? "*.gif" : "*.mp4";
+                var files = Directory.Exists(saved) ? Directory.GetFiles(saved, extension) : [];
+                if (format == RecordingFormat.Video && files.Length == 0 && app.Notifier.Last?.Title == "Could not record")
+                {
+                    report.Values["video"] = "not available on this computer: " + app.Notifier.Last?.Text;
+                    continue;
+                }
+
+                report.Check(files.Length == 1, $"{format}: expected one file, found {files.Length}");
+                report.Check(app.Notifier.Last?.Title == "Recording saved", $"{format}: the last notice was “{app.Notifier.Last?.Title}”");
+                if (files.Length != 1) continue;
+                File.Copy(files[0], Path.Combine(output, "recording" + Path.GetExtension(files[0])), overwrite: true);
+                report.Values[format + ".bytes"] = new FileInfo(files[0]).Length;
+
+                if (format == RecordingFormat.Gif)
+                {
+                    using var stream = File.OpenRead(files[0]);
+                    var decoder = new GifBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                    report.Values["Gif.frames"] = decoder.Frames.Count;
+                    report.Check(decoder.Frames.Count >= 8, $"The GIF has only {decoder.Frames.Count} frames");
+                    report.Check(decoder.Frames[0].PixelWidth == area.Width && decoder.Frames[0].PixelHeight == area.Height,
+                        $"The GIF is {decoder.Frames[0].PixelWidth}x{decoder.Frames[0].PixelHeight}, expected {area.Width}x{area.Height}");
+                }
+                else
+                {
+                    var file = await global::Windows.Storage.StorageFile.GetFileFromPathAsync(files[0]);
+                    var video = await file.Properties.GetVideoPropertiesAsync();
+                    report.Values["Video.size"] = $"{video.Width}x{video.Height}";
+                    report.Values["Video.seconds"] = Math.Round(video.Duration.TotalSeconds, 2);
+                    report.Check(video.Width == (uint)(area.Width & ~1) && video.Height == (uint)(area.Height & ~1),
+                        $"The video is {video.Width}x{video.Height}, expected {area.Width & ~1}x{area.Height & ~1}");
+                    report.Check(video.Duration.TotalSeconds is > 1.2 and < 3.5, $"The video lasts {video.Duration.TotalSeconds:0.0} s, expected about 2");
+                }
+            }
+
+            // Cancelling throws the file away.
+            int before = Directory.GetFiles(saved).Length;
+            var cancelled = app.Controller.StartRecordingAt(area, RecordingFormat.Gif);
+            await Settle(500);
+            app.Controller.CancelRecording();
+            await cancelled;
+            report.Check(Directory.GetFiles(saved).Length == before, "A cancelled recording left a file behind");
+        }
+        finally
+        {
+            mover.Stop();
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// Reads English and Bengali text drawn on the spot. Bengali is read by the engine and language data
+    /// that ship beside the program, so this also proves that they were installed with it.
+    /// </summary>
+    private static async Task TextReading(Report report, string output)
+    {
+        static PixelBuffer Draw(params string[] lines)
+        {
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen())
+            {
+                dc.DrawRectangle(Brushes.White, null, new Rect(0, 0, 760, lines.Length * 28 + 40));
+                for (int i = 0; i < lines.Length; i++)
+                    dc.DrawText(new FormattedText(lines[i], CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface("Nirmala UI"), 15, Brushes.Black, 1.0), new Point(20, 20 + i * 28));
+            }
+
+            var target = new RenderTargetBitmap(760, lines.Length * 28 + 40, 96, 96, PixelFormats.Pbgra32);
+            target.Render(visual);
+            return target.ToPixelBuffer();
+        }
+
+        var languages = TextRecognizer.AvailableLanguages();
+        report.Values["languages"] = string.Join(", ", languages.Select(l => l.Tag));
+        if (!BengaliRecognizer.IsAvailable)
+        {
+            // The Bengali engine exists for 64-bit Intel and AMD processors only.
+            report.Check(System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64,
+                "Bengali recognition is missing: the tessdata and x64 folders were not installed beside the program");
+            report.Values["bengali"] = "not available on this processor";
+            return;
+        }
+
+        report.Check(languages.Any(l => l.Tag == BengaliRecognizer.Tag), "Bengali is not offered as a recognition language");
+        var bengali = Draw("আমার সোনার বাংলা, আমি তোমায় ভালোবাসি", "বাংলাদেশের রাজধানী ঢাকা", "ShotIt saves this capture");
+        SavePng(bengali, Path.Combine(output, "ocr-bengali.png"));
+
+        var watch = Stopwatch.StartNew();
+        var chosen = await Task.Run(() => TextRecognizer.RecognizeAsync(bengali, BengaliRecognizer.Tag));
+        report.Values["bengaliMs"] = watch.ElapsedMilliseconds;
+        report.Values["bengaliText"] = chosen.Text;
+        report.Check(chosen.Text.Contains("সোনার বাংলা", StringComparison.Ordinal) && chosen.Text.Contains("রাজধানী ঢাকা", StringComparison.Ordinal),
+            "Bengali text was not read: " + chosen.Text);
+        report.Check(chosen.Text.Contains("saves this capture", StringComparison.Ordinal), "English beside Bengali was not read: " + chosen.Text);
+
+        watch.Restart();
+        var automatic = await Task.Run(() => TextRecognizer.RecognizeAsync(bengali, string.Empty));
+        report.Values["automaticMs"] = watch.ElapsedMilliseconds;
+        report.Check(automatic.Language == BengaliRecognizer.Tag && automatic.Text.Contains("সোনার বাংলা", StringComparison.Ordinal),
+            $"Automatic language did not find Bengali ({automatic.Language}): {automatic.Text}");
+
+        var english = await Task.Run(() => TextRecognizer.RecognizeAsync(Draw("Quarterly revenue report", "Invoice number 48213"), string.Empty));
+        report.Values["englishLanguage"] = english.Language;
+        report.Check(english.Text.Contains("Quarterly revenue report", StringComparison.Ordinal) && english.Text.Contains("48213", StringComparison.Ordinal),
+            "English text was not read: " + english.Text);
+        if (languages.Count > 1) report.Check(english.Language != BengaliRecognizer.Tag, "English text was treated as Bengali");
+    }
+
+    /// <summary>
+    /// Opens a video made on the spot in the video editor, trims it, crops it and adds audio through the
+    /// same calls the buttons make, then saves it as MP4 and as GIF and checks what was written.
+    /// </summary>
+    private static async Task VideoEditing(AppServices app, Report report, string output)
+    {
+        string source = Path.Combine(output, "source.mp4"), tone = Path.Combine(output, "tone.wav");
+        foreach (string old in Directory.GetFiles(output, "edited.*")) File.Delete(old);
+        try
+        {
+            // Three seconds: a colour in each quarter and a white bar that moves, so playback is visible.
+            using var sink = new Mp4Sink(source, new PixelSize(480, 320), framesPerSecond: 20);
+            for (int i = 0; i < 60; i++)
+            {
+                var frame = new PixelBuffer(480, 320);
+                for (int y = 0; y < 320; y++)
+                    for (int x = 0; x < 480; x++)
+                        frame.SetPixel(x, y, x >= i * 7 && x < i * 7 + 24 ? ColorRgba.White
+                            : y < 160 ? (x < 240 ? new ColorRgba(200, 40, 40) : new ColorRgba(40, 170, 60))
+                            : (x < 240 ? new ColorRgba(40, 70, 200) : new ColorRgba(220, 190, 40)));
+                sink.Add(frame, TimeSpan.FromMilliseconds(i * 50));
+            }
+
+            await sink.FinishAsync(TimeSpan.FromSeconds(3));
+        }
+        catch (RecordingUnavailableException ex)
+        {
+            report.Values["video"] = "not available on this computer: " + ex.Message;
+            return;
+        }
+
+        using (var wav = new BinaryWriter(File.Create(tone)))
+        {
+            const int Rate = 22050, Samples = Rate * 5;
+            wav.Write("RIFF"u8);
+            wav.Write(36 + Samples * 2);
+            wav.Write("WAVEfmt "u8);
+            wav.Write(16);
+            wav.Write((short)1);
+            wav.Write((short)1);
+            wav.Write(Rate);
+            wav.Write(Rate * 2);
+            wav.Write((short)2);
+            wav.Write((short)16);
+            wav.Write("data"u8);
+            wav.Write(Samples * 2);
+            for (int i = 0; i < Samples; i++) wav.Write((short)(Math.Sin(i * 2 * Math.PI * 330 / Rate) * 2000));
+        }
+
+        var window = await app.OpenVideoEditorAsync(source);
+        if (window is null)
+        {
+            report.Failures.Add("The video editor did not open: " + app.Notifier.Last?.Text);
+            return;
+        }
+
+        try
+        {
+            await Settle(1500);
+            report.Check(window.CurrentEdit.IsUnchanged, "A freshly opened video already has changes");
+            SaveWindowPicture(window, Path.Combine(output, "video-editor.png"));
+
+            // The preview must really show the video, a quarter of which is red. Nothing else in the window is.
+            if (GdiScreen.PrintWindow(new System.Windows.Interop.WindowInteropHelper(window).Handle) is { } shown)
+            {
+                int red = 0;
+                for (int i = 0; i < shown.Width * shown.Height * 4; i += 4)
+                    if (shown.Data[i + 2] > 150 && shown.Data[i + 1] < 90 && shown.Data[i] < 90) red++;
+                double share = (double)red / (shown.Width * shown.Height);
+                report.Values["previewRedShare"] = Math.Round(share, 3);
+                report.Check(share > 0.05, "The preview does not show the video");
+            }
+
+            window.SetTrim(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2.5));
+            window.SetCrop(new PixelRect(240, 160, 240, 160));
+            window.SetAudio(tone, await VideoEditor.AudioLengthAsync(tone));
+            await Settle(600);
+            SaveWindowPicture(window, Path.Combine(output, "video-editor-edited.png"));
+            var edit = window.CurrentEdit;
+            report.Check(edit.Start == TimeSpan.FromSeconds(1) && edit.End == TimeSpan.FromSeconds(2.5), $"Trim is {edit.Start} to {edit.End}");
+            report.Check(edit.Crop == new PixelRect(240, 160, 240, 160), $"Crop is {edit.Crop}");
+
+            string video = Path.Combine(output, "edited.mp4");
+            var watch = Stopwatch.StartNew();
+            report.Check(await window.ExportAsync(video, RecordingFormat.Video), "Saving as MP4 failed");
+            report.Values["mp4Ms"] = watch.ElapsedMilliseconds;
+            if (File.Exists(video))
+            {
+                var info = await VideoEditor.ProbeAsync(video);
+                report.Values["mp4"] = $"{info.Size.Width}x{info.Size.Height}, {info.Duration.TotalSeconds:0.00} s, sound: {info.HasAudio}";
+                report.Check(info.Size == new PixelSize(240, 160), $"The saved video is {info.Size.Width}x{info.Size.Height}, expected 240x160");
+                report.Check(info.Duration.TotalSeconds is > 1.3 and < 1.8, $"The saved video lasts {info.Duration.TotalSeconds:0.00} s, expected 1.5");
+                report.Check(info.HasAudio, "The saved video has no sound");
+                var still = await VideoEditor.FrameAsync(video, TimeSpan.FromSeconds(0.2));
+                var corner = still.GetPixel(200, 120);
+                report.Check(Math.Abs(corner.R - 220) < 25 && Math.Abs(corner.G - 190) < 25 && Math.Abs(corner.B - 40) < 25,
+                    $"The saved video shows {corner} where the bottom right quarter (#DCBE28) should be");
+            }
+
+            string gif = Path.Combine(output, "edited.gif");
+            report.Check(await window.ExportAsync(gif, RecordingFormat.Gif), "Saving as GIF failed");
+            if (File.Exists(gif))
+            {
+                using var stream = File.OpenRead(gif);
+                var decoder = new GifBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                report.Values["gif"] = $"{decoder.Frames[0].PixelWidth}x{decoder.Frames[0].PixelHeight}, {decoder.Frames.Count} frames";
+                report.Check(decoder.Frames[0].PixelWidth == 240 && decoder.Frames[0].PixelHeight == 160, "The saved GIF is not 240x160");
+                report.Check(decoder.Frames.Count >= 5, $"The saved GIF has only {decoder.Frames.Count} frames");
+            }
+
+            // Saving over the file that is open must be refused, and must leave it alone.
+            long before = new FileInfo(source).Length;
+            report.Check(!await window.ExportAsync(source, RecordingFormat.Video), "The video was saved over itself");
+            report.Check(new FileInfo(source).Length == before, "The original video was changed");
+        }
+        finally
+        {
+            window.Close();
+        }
     }
 
     private static async Task RealCapture(AppServices app, Report report)

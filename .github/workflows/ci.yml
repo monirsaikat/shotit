@@ -38,7 +38,7 @@ jobs:
         run: |
           $exe = Get-ChildItem src/ShotIt.App/bin/Release -Recurse -Filter ShotIt.exe | Select-Object -First 1
           $failed = @()
-          foreach ($scenario in 'editor', 'windows', 'policy', 'overlay') {
+          foreach ($scenario in 'editor', 'windows', 'policy', 'overlay', 'ocr') {
             $out = Join-Path $env:RUNNER_TEMP "selftest/$scenario"
             $process = Start-Process $exe.FullName -ArgumentList '--selftest', $scenario, "`"$out`"" -Wait -PassThru
             Write-Host "$scenario exited with $($process.ExitCode)"

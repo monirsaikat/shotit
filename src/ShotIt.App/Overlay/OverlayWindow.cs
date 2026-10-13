@@ -124,7 +124,7 @@ public sealed class OverlayWindow : Window
 
         _palette = new ToolPalette(session.Editor) { HorizontalAlignment = HorizontalAlignment.Right };
         _palette.OptionsChanged += onOptionsChanged;
-        var actions = new ActionBar(session.RequestAction) { HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 6, 0, 0) };
+        var actions = new ActionBar(session.RequestAction, onScreen: true) { HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 6, 0, 0) };
         _bars.Children.Clear();
         _bars.Children.Add(_palette);
         _bars.Children.Add(actions);

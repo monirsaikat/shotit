@@ -82,6 +82,13 @@ public static unsafe class WindowInterop
         else ChangeExStyle(hwnd, 0, WINDOW_EX_STYLE.WS_EX_TRANSPARENT);
     }
 
+    /// <summary>Stops the window taking the keyboard focus when it is clicked, so the window being worked on stays active.</summary>
+    public static void MakeNoActivate(nint hwnd) => ChangeExStyle(hwnd, WINDOW_EX_STYLE.WS_EX_NOACTIVATE, 0);
+
+    /// <summary>Leaves the window out of every screen capture. Returns false on systems that cannot do this.</summary>
+    public static bool ExcludeFromCapture(nint hwnd) =>
+        PInvoke.SetWindowDisplayAffinity((HWND)hwnd, WINDOW_DISPLAY_AFFINITY.WDA_EXCLUDEFROMCAPTURE);
+
     public static void ShowNoActivate(nint hwnd) => PInvoke.ShowWindow((HWND)hwnd, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
 
     public static void Hide(nint hwnd) => PInvoke.ShowWindow((HWND)hwnd, SHOW_WINDOW_CMD.SW_HIDE);
@@ -125,6 +132,41 @@ public static unsafe class WindowInterop
     public static bool IsForeground(nint hwnd) => PInvoke.GetForegroundWindow() == (HWND)hwnd;
 
     public static void Beep() => PInvoke.MessageBeep(MESSAGEBOX_STYLE.MB_OK);
+}
+
+/// <summary>Moves the mouse pointer and turns the wheel on the user's behalf (scrolling capture).</summary>
+public static unsafe class MouseInput
+{
+    public static bool MoveTo(PixelPoint point) => PInvoke.SetCursorPos(point.X, point.Y);
+
+    /// <summary>Turns the wheel towards the user by a number of notches, which scrolls the window under the pointer down.</summary>
+    public static bool WheelDown(int notches)
+    {
+        const int WheelDelta = 120;
+        bool ok = true;
+        for (int i = 0; i < notches; i++)
+        {
+            // Notches sent in one burst are partly ignored by some programs; a short gap gets each one counted.
+            if (i > 0) Thread.Sleep(12);
+            INPUT input = default;
+            input.type = INPUT_TYPE.INPUT_MOUSE;
+            input.Anonymous.mi.dwFlags = MOUSE_EVENT_FLAGS.MOUSEEVENTF_WHEEL;
+            input.Anonymous.mi.mouseData = unchecked((uint)-WheelDelta);
+            ok &= PInvoke.SendInput(1, &input, sizeof(INPUT)) == 1;
+        }
+
+        return ok;
+    }
+}
+
+/// <summary>Reads which keys and mouse buttons are held down right now, without installing any hook.</summary>
+public static class InputState
+{
+    public const int LeftButton = 0x01;
+    public const int RightButton = 0x02;
+
+    /// <param name="virtualKey">A Windows virtual-key code.</param>
+    public static bool IsKeyDown(int virtualKey) => (PInvoke.GetAsyncKeyState(virtualKey) & 0x8000) != 0;
 }
 
 public static class AppIdentity

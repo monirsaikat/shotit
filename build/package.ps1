@@ -84,7 +84,7 @@ try {
         # The published program must pass its own end-to-end checks on the build machine's architecture.
         $native = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'win-arm64' } else { 'win-x64' }
         if (-not $SkipTests -and $rid -eq $native) {
-            foreach ($scenario in 'overlay', 'editor', 'windows', 'policy') {
+            foreach ($scenario in 'overlay', 'editor', 'windows', 'policy', 'ocr') {
                 $out = Join-Path $artifacts "selftest/$rid/$scenario"
                 for ($attempt = 1; $attempt -le 2; $attempt++) {
                     Write-Host "==> Self-test $scenario ($rid), attempt $attempt" -ForegroundColor Cyan

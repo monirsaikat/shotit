@@ -157,6 +157,12 @@ public enum UploadProvider
     LocalFolder,
 }
 
+public enum RecordingFormat
+{
+    Video,
+    Gif,
+}
+
 public enum CaptureBackendPreference
 {
     Auto,
@@ -189,6 +195,9 @@ public sealed class HotkeySettings
     public Hotkey LastRegion { get; set; } = new(HotkeyModifiers.Ctrl | HotkeyModifiers.Shift, Hotkey.VkPrintScreen);
     public Hotkey Freeform { get; set; } = Hotkey.None;
     public Hotkey DelayedRegion { get; set; } = Hotkey.None;
+    public Hotkey Scrolling { get; set; } = Hotkey.None;
+    public Hotkey RecordVideo { get; set; } = Hotkey.None;
+    public Hotkey RecordGif { get; set; } = Hotkey.None;
     public Hotkey TogglePins { get; set; } = new(HotkeyModifiers.Ctrl | HotkeyModifiers.Shift, 'P');
     public Hotkey OpenHistory { get; set; } = Hotkey.None;
     public Hotkey PinClipboard { get; set; } = Hotkey.None;
@@ -207,7 +216,29 @@ public sealed class CaptureSettings
     public AfterCaptureAction EnterAction { get; set; } = AfterCaptureAction.Copy;
     public int FixedWidth { get; set; } = 1280;
     public int FixedHeight { get; set; } = 720;
+
+    /// <summary>A scrolling capture stops when the picture reaches this height in pixels.</summary>
+    public int ScrollMaxHeight { get; set; } = 20000;
     public int[]? LastRegion { get; set; }
+}
+
+public sealed class RecordingSettings
+{
+    public int VideoFramesPerSecond { get; set; } = 30;
+    public int GifFramesPerSecond { get; set; } = 12;
+    public bool ShowPointer { get; set; } = true;
+
+    /// <summary>Draw a ring around the pointer while a mouse button is pressed.</summary>
+    public bool ShowClicks { get; set; } = true;
+
+    /// <summary>Show keyboard shortcuts as a caption. Plain typing is never shown.</summary>
+    public bool ShowKeys { get; set; }
+
+    /// <summary>Open a finished video recording in the video editor straight away.</summary>
+    public bool EditAfterRecording { get; set; }
+
+    /// <summary>A recording ends by itself after this many seconds.</summary>
+    public int MaxSeconds { get; set; } = 300;
 }
 
 public sealed class OutputSettings
@@ -301,6 +332,7 @@ public sealed class AppSettings
     public GeneralSettings General { get; set; } = new();
     public HotkeySettings Hotkeys { get; set; } = new();
     public CaptureSettings Capture { get; set; } = new();
+    public RecordingSettings Recording { get; set; } = new();
     public OutputSettings Output { get; set; } = new();
     public EditorSettings Editor { get; set; } = new();
     public HistorySettings History { get; set; } = new();

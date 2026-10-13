@@ -24,6 +24,12 @@
     <PublishReadyToRunExclude Include="FluentFTP.dll" />
     <PublishReadyToRunExclude Include="zxing.dll" />
   </ItemGroup>
+  <!-- The Bengali recognition engine exists for x64 only, so its files are left out of the ARM64 build. -->
+  <Target Name="DropRecognitionEngineWhereItCannotRun" AfterTargets="ComputeResolvedFilesToPublishList" Condition="'$(RuntimeIdentifier)' == 'win-arm64'">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="$([System.String]::Copy('%(ResolvedFileToPublish.RelativePath)').StartsWith('x64\')) Or $([System.String]::Copy('%(ResolvedFileToPublish.RelativePath)').StartsWith('tessdata\'))" />
+    </ItemGroup>
+  </Target>
   <ItemGroup>
     <PackageReference Include="Serilog" />
     <PackageReference Include="Serilog.Sinks.File" />

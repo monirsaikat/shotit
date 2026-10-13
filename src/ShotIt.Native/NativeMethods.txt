@@ -26,6 +26,10 @@ GetCursorInfo
 GetIconInfo
 DrawIconEx
 GetCursorPos
+SetCursorPos
+SendInput
+GetAsyncKeyState
+SetWindowDisplayAffinity
 PrintWindow
 RegisterWindowMessage
 GetSystemMetrics
@@ -101,3 +105,16 @@ NOTIFY_ICON_INFOTIP_FLAGS
 SetProcessDpiAwarenessContext
 GetProcessDpiAwareness
 DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+MFStartup
+MFShutdown
+MFCreateAttributes
+MFCreateSourceReaderFromURL
+MFCreateMediaType
+IMFSourceReader
+IMF2DBuffer
+MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING
+MF_MT_MAJOR_TYPE
+MF_MT_SUBTYPE
+MF_MT_FRAME_SIZE
+MFMediaType_Video
+MFVideoFormat_RGB32
