@@ -118,6 +118,15 @@ public sealed class OverlayWindow : Window
         _surface.Origin = new Vec2(monitor.Bounds.X - origin.X, monitor.Bounds.Y - origin.Y);
         _surface.DrawBase = true;
         _surface.Session = session.Editor;
+        // WPF can expose the window background before the editor surface's first paint.
+        // Use the frozen screen there too, so a delayed paint cannot flash black.
+        Background = new ImageBrush(session.Bitmap)
+        {
+            ViewboxUnits = BrushMappingMode.Absolute,
+            Viewbox = new Rect(monitor.Bounds.X - origin.X, monitor.Bounds.Y - origin.Y,
+                monitor.Bounds.Width, monitor.Bounds.Height),
+            Stretch = Stretch.Fill,
+        };
         _layer.ShowHint = showHint;
         _layer.Configure(session, monitor);
         _magnifier.Configure(session);
@@ -149,6 +158,7 @@ public sealed class OverlayWindow : Window
         _magnifier.Configure(null);
         _layer.Configure(null, null);
         _surface.Session = null;
+        Background = Brushes.Black;
         _session = null;
         if (_root.IsMouseCaptured) _root.ReleaseMouseCapture();
     }
@@ -166,7 +176,8 @@ public sealed class OverlayWindow : Window
         }
         else
         {
-            WindowInterop.ShowNoActivate(_handle);
+            // ShowActivated is false. Let WPF show its own HWND only after it has
+            // prepared the visual tree; showing it natively first exposed a black frame.
             Show();
         }
 

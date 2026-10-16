@@ -573,8 +573,8 @@ public sealed class CaptureController
         {
             try
             {
-                window.Detach();
                 window.Hide();
+                window.Detach();
             }
             catch (Exception ex)
             {
