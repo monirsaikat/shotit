@@ -1,8 +1,11 @@
 name: Release
 
-# Run by hand (Actions > Release > Run workflow) with a version such as 1.2.0.
+# Push a version tag or run by hand with a version such as 1.2.0.
 # It builds every installer and publishes a GitHub release.
 on:
+  push:
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       version:
@@ -16,6 +19,8 @@ jobs:
   package:
     runs-on: windows-latest
     timeout-minutes: 60
+    env:
+      RELEASE_VERSION: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -31,12 +36,12 @@ jobs:
           # Without this secret the release is built unsigned and Windows SmartScreen will warn users.
           SIGN_PARAMS: ${{ secrets.SIGN_PARAMS }}
         run: |
-          $version = '${{ inputs.version }}'
+          $version = $env:RELEASE_VERSION -replace '^v', ''
           $repo = 'https://github.com/${{ github.repository }}'
           $arguments = @{
             Version       = $version
             UpdateFeedUrl = $repo
-            PackageUrl    = "$repo/releases/download/v${{ inputs.version }}"
+            PackageUrl    = "$repo/releases/download/v$version"
           }
           if ($env:SIGN_PARAMS) { $arguments.SignParams = $env:SIGN_PARAMS }
           ./build/package.ps1 @arguments
@@ -49,7 +54,8 @@ jobs:
           $files = Get-ChildItem artifacts/release -File | ForEach-Object FullName
           # The update feed files must sit beside the installers for the in-app updater to find them.
           $files += Get-ChildItem artifacts/release/feed -File | ForEach-Object FullName
-          gh release create 'v${{ inputs.version }}' $files --title 'ShotIt v${{ inputs.version }}' --generate-notes
+          $version = $env:RELEASE_VERSION -replace '^v', ''
+          gh release create "v$version" $files --title "ShotIt v$version" --generate-notes
 
       - name: Keep the winget manifest
         uses: actions/upload-artifact@v4

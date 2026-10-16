@@ -16,6 +16,12 @@ dotnet run --project src/ShotIt.App
 
 ## Making a release
 
+Push a `vMAJOR.MINOR.PATCH` tag (for example, `v0.2.3`) to run the GitHub Release workflow.
+It builds and publishes the installers, portable archives, MSI packages and update feed.
+The workflow can also be started manually from GitHub Actions with a three-part version.
+
+To build the same artifacts locally without publishing them:
+
 ```
 powershell -ExecutionPolicy Bypass -File build/package.ps1 -Version 1.0.0
 ```
