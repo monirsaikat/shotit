@@ -58,7 +58,7 @@ jobs:
           gh release create "v$version" $files --title "ShotIt v$version" --generate-notes
 
       - name: Keep the winget manifest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: winget-manifest
           path: artifacts/release/winget
