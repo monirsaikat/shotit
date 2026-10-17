@@ -58,6 +58,7 @@ DeleteObject
 BitBlt
 GetDIBits
 DwmGetWindowAttribute
+DwmSetWindowAttribute
 DwmIsCompositionEnabled
 GetDpiForMonitor
 Shell_NotifyIcon

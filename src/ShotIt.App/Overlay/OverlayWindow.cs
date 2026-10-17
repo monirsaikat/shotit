@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using ShotIt.App.Editing;
 using ShotIt.Core.Display;
 using ShotIt.Core.Editing;
@@ -30,6 +31,7 @@ public sealed class OverlayWindow : Window
     private ToolPalette? _palette;
     private nint _handle;
     private bool _hadInput;
+    private int _revealGeneration;
 
     public OverlayWindow(MonitorDescriptor monitor)
     {
@@ -165,6 +167,9 @@ public sealed class OverlayWindow : Window
 
     public void ShowOverlay(bool activate)
     {
+        // A pooled window still holds its previous picture (or plain black) until WPF paints the new frame,
+        // which takes a moment for a large screen. Keep it cloaked until then so that is never seen.
+        bool cloaked = WindowInterop.SetCloaked(_handle, cloaked: true);
         ApplyBounds();
         if (activate)
         {
@@ -182,6 +187,32 @@ public sealed class OverlayWindow : Window
         }
 
         ApplyBounds();
+        if (cloaked) RevealAfterFirstFrame();
+    }
+
+    private void RevealAfterFirstFrame()
+    {
+        int generation = ++_revealGeneration;
+        int frames = 0;
+        DispatcherTimer? fallback = null;
+
+        void Reveal()
+        {
+            CompositionTarget.Rendering -= OnRendering;
+            fallback?.Stop();
+            if (generation == _revealGeneration) WindowInterop.SetCloaked(_handle, cloaked: false);
+        }
+
+        // Rendering fires before each frame; by the second one the first frame with the new picture is done.
+        void OnRendering(object? sender, EventArgs e)
+        {
+            if (++frames >= 2) Reveal();
+        }
+
+        CompositionTarget.Rendering += OnRendering;
+        // Never leave the overlay invisible, even if rendering stalls.
+        fallback = new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Send, (_, _) => Reveal(), Dispatcher);
+        fallback.Start();
     }
 
     public void TakeFocus()
@@ -202,8 +233,15 @@ public sealed class OverlayWindow : Window
     {
         if (_session is null) return;
         var session = _session;
-        _surface.ClipArea = session.Editor.ClipArea;
-        _surface.InvalidateVisual();
+        // The surface repaints itself when the drawing changes. The region only clips annotations, so
+        // redrawing the whole frozen screen on every mouse move is needed only once there are some.
+        var clip = session.Editor.ClipArea;
+        if (!Nullable.Equals(_surface.ClipArea, clip))
+        {
+            _surface.ClipArea = clip;
+            if (session.Editor.State.Items.Count > 0 || session.Editor.Draft is not null) _surface.InvalidateVisual();
+        }
+
         _layer.InvalidateVisual();
         UpdateMagnifier(session);
         UpdateBars(session);

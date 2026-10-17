@@ -89,6 +89,16 @@ public static unsafe class WindowInterop
     public static bool ExcludeFromCapture(nint hwnd) =>
         PInvoke.SetWindowDisplayAffinity((HWND)hwnd, WINDOW_DISPLAY_AFFINITY.WDA_EXCLUDEFROMCAPTURE);
 
+    /// <summary>
+    /// Hides or reveals the window in the compositor without changing its visibility, so it can be shown
+    /// and painted off screen first. Returns false when the system does not support cloaking.
+    /// </summary>
+    public static bool SetCloaked(nint hwnd, bool cloaked)
+    {
+        BOOL value = cloaked;
+        return PInvoke.DwmSetWindowAttribute((HWND)hwnd, Windows.Win32.Graphics.Dwm.DWMWINDOWATTRIBUTE.DWMWA_CLOAK, &value, (uint)sizeof(BOOL)).Succeeded;
+    }
+
     public static void ShowNoActivate(nint hwnd) => PInvoke.ShowWindow((HWND)hwnd, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
 
     public static void Hide(nint hwnd) => PInvoke.ShowWindow((HWND)hwnd, SHOW_WINDOW_CMD.SW_HIDE);

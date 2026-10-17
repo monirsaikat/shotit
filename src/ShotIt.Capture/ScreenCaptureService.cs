@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using ShotIt.Core.Display;
 using ShotIt.Core.Geometry;
 using ShotIt.Core.Imaging;
@@ -100,6 +101,9 @@ public sealed class ScreenCaptureService
             {
                 throw new CaptureUnavailableException("Windows refused to let the screen be read. " + ex.Message, ex);
             }
+
+            if (Preference == CaptureBackendPreference.Auto && RepairBlackMonitors(image, topology) is { } repairedWith)
+                backendName = "GDI+" + repairedWith;
         }
 
         if (includeCursor && CursorCapture.Capture() is { } cursor)
@@ -122,6 +126,57 @@ public sealed class ScreenCaptureService
             default:
                 return WindowList.IsExclusiveFullScreenAppRunning() ? _gpuBackends.Where(b => b.IsAvailable) : [];
         }
+    }
+
+    /// <summary>
+    /// GDI reads black for a monitor showing borderless full-screen video or games that bypass the
+    /// compositor. Such monitors are captured again with a GPU backend. Returns the backend used, if any.
+    /// </summary>
+    private string? RepairBlackMonitors(PixelBuffer image, MonitorTopology topology)
+    {
+        string? used = null;
+        var origin = topology.VirtualBounds.Location;
+        foreach (var monitor in topology.Monitors)
+        {
+            var local = monitor.Bounds.Offset(-origin.X, -origin.Y).Intersect(image.Bounds);
+            if (local.IsEmpty || !IsAllBlack(image, local)) continue;
+
+            _log($"GDI returned a black picture for monitor {monitor.Bounds}; trying a GPU backend.");
+            foreach (var backend in _gpuBackends.Where(b => b.IsAvailable))
+            {
+                PixelBuffer? part;
+                try
+                {
+                    part = backend.TryCapture(monitor);
+                }
+                catch (Exception ex)
+                {
+                    _log($"Capture backend {backend.Name} threw: {ex.Message}");
+                    continue;
+                }
+
+                if (part is null || IsAllBlack(part, part.Bounds)) continue;
+                part.MakeOpaque();
+                image.Blit(part, local.X, local.Y);
+                used = backend.Name;
+                break;
+            }
+        }
+
+        return used;
+    }
+
+    /// <summary>True when every pixel in the rectangle is pure black (GDI sets alpha to opaque first).</summary>
+    internal static bool IsAllBlack(PixelBuffer image, PixelRect rect)
+    {
+        for (int y = rect.Top; y < rect.Bottom; y++)
+        {
+            var row = MemoryMarshal.Cast<byte, uint>(image.Row(y).Slice(rect.X * 4, rect.Width * 4));
+            foreach (uint pixel in row)
+                if ((pixel & 0x00FFFFFF) != 0) return false;
+        }
+
+        return true;
     }
 
     private PixelBuffer? TryCaptureWithBackend(IMonitorCaptureBackend backend, MonitorTopology topology)
