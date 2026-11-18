@@ -18,6 +18,7 @@ namespace ShotIt.App.Services;
 /// </summary>
 public sealed class CaptureResult
 {
+    private readonly Lazy<byte[]> _png;
     private PixelBuffer? _final;
 
     public CaptureResult(DocState document, string sourceApp = "", string sourceTitle = "", PixelRect? screenRegion = null)
@@ -27,6 +28,7 @@ public sealed class CaptureResult
         SourceTitle = sourceTitle ?? string.Empty;
         ScreenRegion = screenRegion;
         CapturedAt = DateTime.Now;
+        _png = new Lazy<byte[]>(() => ImageCodec.Encode(Image, ImageFormat.Png));
     }
 
     /// <summary>The editable form: image plus annotations.</summary>
@@ -42,6 +44,13 @@ public sealed class CaptureResult
 
     /// <summary>The flattened pixels that get copied, saved and uploaded. Rendered once, on the UI thread.</summary>
     public PixelBuffer Image => _final ??= DocumentRenderer.RenderFinal(Document);
+
+    /// <summary>
+    /// The picture as a PNG file. Compressing a large picture is slow, so it is done once and shared by
+    /// the clipboard, the library copy and saving. May be read from a background thread once
+    /// <see cref="Image"/> has been rendered.
+    /// </summary>
+    public byte[] Png => _png.Value;
 
     public long? HistoryId { get; set; }
     public string? LibraryPath { get; set; }
@@ -94,10 +103,13 @@ public sealed class OutputService
     public bool Copy(CaptureResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
+        // Start compressing straight away on another thread; the steps below all wait for the same result.
+        _ = result.Image;
+        _ = Task.Run(() => result.Png);
         if (_settings.History.Mode == HistoryMode.All) EnsureInLibrary(result);
         if (_settings.Output.AutoSaveEveryCapture && result.SavedPath is null) Save(result);
         string? file = _settings.Output.CopyFileAlongsideImage ? result.SavedPath ?? result.LibraryPath : null;
-        bool ok = ClipboardService.SetImage(result.Image, file);
+        bool ok = ClipboardService.SetImage(result.Image, file, result.Png);
         if (!ok) _log.Warning("Clipboard was busy; image not copied");
         return ok;
     }
@@ -113,7 +125,7 @@ public sealed class OutputService
         {
             Directory.CreateDirectory(folder);
             string path = FileNameTemplate.MakeUniquePath(folder, BaseName(result), ImageCodec.Extension(format));
-            WriteFile(path, result.Image, format);
+            WriteFile(path, result, format);
             OnSaved(result, path);
             return path;
         }
@@ -134,7 +146,7 @@ public sealed class OutputService
         error = null;
         try
         {
-            WriteFile(path, result.Image, ImageCodec.FormatFromPath(path));
+            WriteFile(path, result, ImageCodec.FormatFromPath(path));
             OnSaved(result, path);
             return true;
         }
@@ -171,7 +183,7 @@ public sealed class OutputService
         try
         {
             string path = dialog.FileName;
-            WriteFile(path, result.Image, ImageCodec.FormatFromPath(path));
+            WriteFile(path, result, ImageCodec.FormatFromPath(path));
             _settings.Output.LastSaveAsFolder = Path.GetDirectoryName(path) ?? string.Empty;
             OnSaved(result, path);
             return path;
@@ -184,9 +196,9 @@ public sealed class OutputService
         }
     }
 
-    private void WriteFile(string path, PixelBuffer image, ImageFormat format)
+    private void WriteFile(string path, CaptureResult result, ImageFormat format)
     {
-        byte[] bytes = ImageCodec.Encode(image, format, _settings.Output.JpegQuality);
+        byte[] bytes = format == ImageFormat.Png ? result.Png : ImageCodec.Encode(result.Image, format, _settings.Output.JpegQuality);
         // Write to a temporary name first so a failure never leaves a truncated image behind.
         string temp = path + ".tmp-" + Guid.NewGuid().ToString("N")[..8];
         try
@@ -259,7 +271,7 @@ public sealed class OutputService
             string folder = Path.Combine(_paths.LibraryDirectory, result.CapturedAt.ToString("yyyy", System.Globalization.CultureInfo.InvariantCulture), result.CapturedAt.ToString("MM", System.Globalization.CultureInfo.InvariantCulture));
             Directory.CreateDirectory(folder);
             string path = FileNameTemplate.MakeUniquePath(folder, BaseName(result), ".png");
-            WriteFile(path, result.Image, ImageFormat.Png);
+            WriteFile(path, result, ImageFormat.Png);
             result.LibraryPath = path;
             result.HistoryId = _history.Add(NewItem(result, path));
             SyncProject(result);

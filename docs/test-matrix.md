@@ -35,11 +35,13 @@ ShotIt.exe --selftest scroll   C:\temp\st-scroll
 ShotIt.exe --selftest record   C:\temp\st-record
 ShotIt.exe --selftest video    C:\temp\st-video
 ShotIt.exe --selftest ocr      C:\temp\st-ocr
+ShotIt.exe --selftest perf     C:\temp\st-perf
 ```
 
 | Scenario | What it proves |
 |---|---|
 | `overlay` | The overlay shows the screen pixel for pixel, selection, annotation, undo, keyboard nudging, save, history, last region, Esc, display change and sleep all behave |
+| `perf` | The overlay stays smooth: frame times while moving, dragging and moving a region, how far the screen falls behind a fast (1000 Hz) mouse, and how long releasing the mouse and copying block the screen. Run it on a Release build. It moves the mouse pointer and shares the desktop with you, so leave the mouse and keyboard alone while it runs. Not run by CI |
 | `editor` | The editor loads annotations, crops, frames, exports and saves |
 | `windows` | Settings (every page), history (search, re-open with annotations, keep, clear, delete), text recognition, QR, upload, printing layout, shell integration, onboarding, reset, pin restore |
 | `policy` | With the administrator policies set, nothing is uploaded, recorded in history or updated |

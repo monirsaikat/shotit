@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using ShotIt.App.Infrastructure;
 using ShotIt.Core.Annotations;
 using ShotIt.Core.Editing;
 using ShotIt.Core.Geometry;
@@ -21,10 +22,12 @@ public sealed class EditorSurface : FrameworkElement
     private static readonly Brush CropShade = Freeze(new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)));
 
     private readonly AnnotationRenderer _renderer = new();
+    private readonly FrameThrottle _repaint;
     private EditorSession? _session;
 
     public EditorSurface()
     {
+        _repaint = new FrameThrottle(InvalidateVisual);
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
     }
@@ -42,6 +45,7 @@ public sealed class EditorSurface : FrameworkElement
         {
             if (ReferenceEquals(_session, value)) return;
             if (_session is not null) _session.Changed -= OnSessionChanged;
+            _repaint.Cancel();
             _session = value;
             if (_session is not null) _session.Changed += OnSessionChanged;
             InvalidateVisual();
@@ -62,7 +66,8 @@ public sealed class EditorSurface : FrameworkElement
     /// <summary>Hides one annotation while its text is being edited in a text box on top of it.</summary>
     public Guid? HiddenAnnotation { get; set; }
 
-    private void OnSessionChanged(object? sender, EventArgs e) => InvalidateVisual();
+    // Drawing reports a change for every mouse message; one repaint per displayed frame is all that can be seen.
+    private void OnSessionChanged(object? sender, EventArgs e) => _repaint.Request();
 
     public Vec2 ToDoc(Point view) => new(view.X / Zoom + Origin.X, view.Y / Zoom + Origin.Y);
 

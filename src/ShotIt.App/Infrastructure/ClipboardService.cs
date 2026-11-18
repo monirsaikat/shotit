@@ -41,15 +41,40 @@ public static class ClipboardService
     /// Puts the image on the clipboard as a bitmap (for every program), as PNG (keeps transparency)
     /// and optionally as a file (pastes into Explorer and e-mail attachments).
     /// </summary>
-    public static bool SetImage(PixelBuffer image, string? filePath = null)
+    public static bool SetImage(PixelBuffer image, string? filePath = null, byte[]? png = null)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+        // Compressing the PNG is the slow part; it runs beside the bitmap conversion instead of after it.
+        var encoded = png is not null ? Task.FromResult(png) : Task.Run(() => ImageCodec.Encode(image, ImageFormat.Png));
+        var bitmap = ToClipboardBitmap(image);
+        return Put(new ClipboardImage(bitmap, encoded.GetAwaiter().GetResult(), filePath));
+    }
+
+    /// <summary>An image converted to the formats the clipboard needs, ready to be placed there.</summary>
+    public sealed record ClipboardImage(BitmapSource Bitmap, byte[] Png, string? FilePath);
+
+    /// <summary>
+    /// Does the slow part of copying an image (conversion and PNG compression). Safe to call from a
+    /// background thread, so the screen stays responsive; <see cref="Put"/> then finishes on the interface thread.
+    /// </summary>
+    public static ClipboardImage Prepare(PixelBuffer image, string? filePath = null)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+        return new ClipboardImage(ToClipboardBitmap(image), ImageCodec.Encode(image, ImageFormat.Png), filePath);
+    }
+
+    // The plain bitmap format has no alpha; flatten onto white so transparent areas do not turn black.
+    private static BitmapSource ToClipboardBitmap(PixelBuffer image) => ImageCodec.Flatten(image, ColorRgba.White).ToBitmapSource();
+
+    /// <summary>Places a prepared image on the clipboard.</summary>
+    public static bool Put(ClipboardImage image)
     {
         ArgumentNullException.ThrowIfNull(image);
         var data = new DataObject();
-        // The plain bitmap format has no alpha; flatten onto white so transparent areas do not turn black.
-        data.SetImage(ImageCodec.Flatten(image, ColorRgba.White).ToBitmapSource());
-        data.SetData("PNG", new MemoryStream(ImageCodec.Encode(image, ImageFormat.Png)), autoConvert: false);
-        if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
-            data.SetFileDropList(new StringCollection { filePath });
+        data.SetImage(image.Bitmap);
+        data.SetData("PNG", new MemoryStream(image.Png), autoConvert: false);
+        if (!string.IsNullOrEmpty(image.FilePath) && File.Exists(image.FilePath))
+            data.SetFileDropList(new StringCollection { image.FilePath });
 
         // copy: true flushes the data so it survives after ShotIt exits.
         return Retry(() => Clipboard.SetDataObject(data, copy: true));

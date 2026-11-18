@@ -37,6 +37,7 @@ public sealed class CaptureController
     private CountdownWindow? _countdown;
     private ScrollCaptureSession? _scroll;
     private RecordingSession? _recording;
+    private int _selectionCopy;
 
     public CaptureController(AppServices app)
     {
@@ -57,6 +58,9 @@ public sealed class CaptureController
 
     /// <summary>The session in progress, for the self-test.</summary>
     internal OverlaySession? CurrentSession => _session;
+
+    /// <summary>The overlay windows, one per monitor, for the self-test.</summary>
+    internal IReadOnlyList<OverlayWindow> OverlayWindows => _windows;
 
     /// <summary>Replaces the real screen capture with a supplied frame. Used only by the self-test.</summary>
     internal Func<ScreenFrame>? FrameSourceOverride { get; set; }
@@ -626,6 +630,8 @@ public sealed class CaptureController
 
         try
         {
+            // Whatever this action produces replaces the automatic copy of the bare selection.
+            _selectionCopy++;
             foreach (var window in _windows) window.CommitTextEdit();
             var built = session.BuildResult();
             if (built is null) return;
@@ -649,12 +655,23 @@ public sealed class CaptureController
 
     private void OnSelectionCompleted()
     {
-        var session = _session;
-        if (session?.BuildResult() is not { } built) return;
+        if (_session?.BuildResult() is { } built) _ = CopySelectionAsync(built);
+    }
+
+    /// <summary>
+    /// Copies a freshly selected region without holding up the screen: compressing a large picture takes
+    /// long enough to be felt as a hitch when the mouse button is released.
+    /// </summary>
+    private async Task CopySelectionAsync(OverlayResult built)
+    {
+        int request = ++_selectionCopy;
         try
         {
-            var result = new CaptureResult(built.Document, built.SourceApp, built.SourceTitle, built.ScreenRegion);
-            if (!ClipboardService.SetImage(result.Image))
+            var image = new CaptureResult(built.Document, built.SourceApp, built.SourceTitle, built.ScreenRegion).Image;
+            var prepared = await Task.Run(() => ClipboardService.Prepare(image));
+            // A newer selection or an action chosen meanwhile puts its own picture on the clipboard.
+            if (request != _selectionCopy) return;
+            if (!ClipboardService.Put(prepared))
                 _app.Notifier.Warn("Could not copy", "Another program is holding the clipboard. Use the toolbar to try again.");
         }
         catch (Exception ex)

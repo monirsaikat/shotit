@@ -5,6 +5,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using ShotIt.App.Editing;
+using ShotIt.App.Infrastructure;
 using ShotIt.Core.Display;
 using ShotIt.Core.Editing;
 using ShotIt.Core.Geometry;
@@ -23,14 +24,17 @@ public sealed class OverlayWindow : Window
     private readonly Grid _root = new() { Background = Brushes.Transparent, Focusable = true, FocusVisualStyle = null };
     private readonly EditorSurface _surface = new();
     private readonly OverlayLayer _layer = new();
+    private readonly HintView _hint = new() { Visibility = Visibility.Collapsed };
     private readonly Canvas _chrome = new();
     private readonly MagnifierView _magnifier = new() { Visibility = Visibility.Collapsed };
     private readonly StackPanel _bars = new() { Visibility = Visibility.Collapsed };
     private readonly TextEditHost _textHost;
+    private readonly FrameThrottle _repaint;
     private OverlaySession? _session;
     private ToolPalette? _palette;
     private nint _handle;
     private bool _hadInput;
+    private bool _showHint;
     private int _revealGeneration;
 
     public OverlayWindow(MonitorDescriptor monitor)
@@ -52,12 +56,14 @@ public sealed class OverlayWindow : Window
 
         _root.Children.Add(_surface);
         _root.Children.Add(_layer);
+        _root.Children.Add(_hint);
         _root.Children.Add(_chrome);
         _chrome.Children.Add(_magnifier);
         _chrome.Children.Add(_bars);
         Content = _root;
 
         _textHost = new TextEditHost(_chrome, _surface, OwnsDocPoint);
+        _repaint = new FrameThrottle(ApplySessionChanges);
         _textHost.EditingChanged += OnTextEditingChanged;
 
         _root.MouseDown += OnMouseDown;
@@ -129,8 +135,9 @@ public sealed class OverlayWindow : Window
                 monitor.Bounds.Width, monitor.Bounds.Height),
             Stretch = Stretch.Fill,
         };
-        _layer.ShowHint = showHint;
+        _showHint = showHint;
         _layer.Configure(session, monitor);
+        _hint.Configure(session);
         _magnifier.Configure(session);
 
         _palette = new ToolPalette(session.Editor) { HorizontalAlignment = HorizontalAlignment.Right };
@@ -143,13 +150,16 @@ public sealed class OverlayWindow : Window
         _textHost.Attach(session.Editor);
         session.Editor.ColorPickRequested += OnColorPick;
         session.Changed += OnSessionChanged;
-        OnSessionChanged();
+        ApplySessionChanges();
     }
 
     public void Detach()
     {
         if (_session is null) return;
         _session.Changed -= OnSessionChanged;
+        _repaint.Cancel();
+        _hint.Visibility = Visibility.Collapsed;
+        _hint.Configure(null);
         _session.Editor.ColorPickRequested -= OnColorPick;
         _textHost.Detach(_session.Editor);
         _palette?.Detach();
@@ -229,7 +239,13 @@ public sealed class OverlayWindow : Window
 
     // ------------------------------------------------------------------ painting
 
-    private void OnSessionChanged()
+    /// <summary>
+    /// The session changes with every mouse message, far more often than the screen is refreshed.
+    /// The window catches up once per frame instead of repainting for each change.
+    /// </summary>
+    private void OnSessionChanged() => _repaint.Request();
+
+    private void ApplySessionChanges()
     {
         if (_session is null) return;
         var session = _session;
@@ -243,6 +259,7 @@ public sealed class OverlayWindow : Window
         }
 
         _layer.InvalidateVisual();
+        _hint.Visibility = _showHint && session.Phase == OverlayPhase.Selecting && !session.IsDragging ? Visibility.Visible : Visibility.Collapsed;
         UpdateMagnifier(session);
         UpdateBars(session);
     }
@@ -327,7 +344,8 @@ public sealed class OverlayWindow : Window
     {
         if (_session is null) return;
         _hadInput = true;
-        _layer.ShowHint = false;
+        _showHint = false;
+        _repaint.Request();
         if (_textHost.IsEditing)
         {
             // A click outside the text box finishes the text; it must not also start a drag.
@@ -399,7 +417,8 @@ public sealed class OverlayWindow : Window
             if (!_hadInput)
             {
                 _hadInput = true;
-                _layer.ShowHint = false;
+                _showHint = false;
+                _repaint.Request();
             }
 
             e.Handled = true;

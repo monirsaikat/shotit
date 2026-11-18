@@ -30,7 +30,7 @@ namespace ShotIt.App;
 /// (and pictures of the windows it opened) and exits with 0 on success. The test runs against its own
 /// data folder and shows a synthetic picture instead of the real screen, so nothing personal is read.
 /// </summary>
-internal static class SelfTest
+internal static partial class SelfTest
 {
     private sealed class Report
     {
@@ -90,6 +90,7 @@ internal static class SelfTest
                 switch (scenario)
                 {
                     case "overlay": await Overlay(services, report, output); break;
+                    case "perf": await Perf(services, report); break;
                     case "editor": await Editor(services, report, output); break;
                     case "windows": await Windows(services, report, output); break;
                     case "capture": await RealCapture(services, report); break;
@@ -215,6 +216,8 @@ internal static class SelfTest
             copySession.MouseUp(new PixelPoint(region.Right, region.Bottom), MouseButton.Left);
             report.Check(app.Controller.IsSessionActive && copySession.Phase == OverlayPhase.Adjusting,
                 "The overlay closed before the selected region could be annotated");
+            // The copy is prepared in the background so the screen is not held up; give it a moment.
+            for (int i = 0; i < 40 && ClipboardService.GetImage()?.Size != region.Size; i++) await Settle(50);
             report.Check(ClipboardService.GetImage()?.Size == region.Size, "The selected region was not copied to the clipboard");
         }
         else report.Failures.Add("No session for the selection and clipboard check");

@@ -21,6 +21,8 @@ public sealed class OverlayLayer : FrameworkElement
     private static readonly Brush LabelBackground = Frozen(Color.FromArgb(230, 0x1F, 0x21, 0x25));
     private static readonly Brush CrosshairBrush = Frozen(Color.FromArgb(150, 255, 255, 255));
     private static readonly Brush SnapFill = Frozen(Color.FromArgb(28, 0x3D, 0x7B, 0xFF));
+    private static readonly Pen SnapPen = FrozenPen(Accent, 2);
+    private static readonly Pen HandlePen = FrozenPen(Accent, 1.5);
 
     private OverlaySession? _session;
     private MonitorDescriptor? _monitor;
@@ -38,15 +40,19 @@ public sealed class OverlayLayer : FrameworkElement
         return brush;
     }
 
+    private static Pen FrozenPen(Brush brush, double thickness)
+    {
+        var pen = new Pen(brush, thickness);
+        pen.Freeze();
+        return pen;
+    }
+
     public void Configure(OverlaySession? session, MonitorDescriptor? monitor)
     {
         _session = session;
         _monitor = monitor;
         InvalidateVisual();
     }
-
-    /// <summary>When true the hint text is shown (only on the monitor under the cursor, only before any input).</summary>
-    public bool ShowHint { get; set; }
 
     private Rect ToLocal(PixelRect r)
     {
@@ -75,6 +81,7 @@ public sealed class OverlayLayer : FrameworkElement
 
         // Dim everything except the region (or the freeform outline, or the hovered snap target).
         Geometry? hole = null;
+        Rect? clear = null;
         if (lasso)
         {
             var outline = new StreamGeometry();
@@ -88,15 +95,15 @@ public sealed class OverlayLayer : FrameworkElement
         }
         else if (region is { } r)
         {
-            hole = new RectangleGeometry(ToLocal(r));
+            clear = ToLocal(r);
         }
         else if (session.HoverTarget is { } hover)
         {
-            hole = new RectangleGeometry(ToLocal(hover.Bounds));
+            clear = ToLocal(hover.Bounds);
         }
 
-        if (hole is null) dc.DrawRectangle(Dim, null, full);
-        else dc.DrawGeometry(Dim, null, new CombinedGeometry(GeometryCombineMode.Exclude, new RectangleGeometry(full), hole));
+        if (hole is not null) dc.DrawGeometry(Dim, null, new CombinedGeometry(GeometryCombineMode.Exclude, new RectangleGeometry(full), hole));
+        else DrawDim(dc, full, clear);
 
         if (lasso)
         {
@@ -106,7 +113,7 @@ public sealed class OverlayLayer : FrameworkElement
         if (region is null && !lasso && session.HoverTarget is { } target && session.Phase == OverlayPhase.Selecting)
         {
             var rect = ToLocal(target.Bounds);
-            dc.DrawRectangle(SnapFill, new Pen(Accent, 2), Deflate(rect, 1));
+            dc.DrawRectangle(SnapFill, SnapPen, Deflate(rect, 1));
             if (target.Label.Length > 0) DrawLabel(dc, target.Label.Length > 70 ? target.Label[..70] + "…" : target.Label, rect, full, above: false);
         }
 
@@ -136,9 +143,25 @@ public sealed class OverlayLayer : FrameworkElement
             dc.DrawRectangle(CrosshairBrush, null, new Rect(0, c.Y, full.Width, px));
             dc.DrawRectangle(CrosshairBrush, null, new Rect(c.X, 0, px, full.Height));
         }
+    }
 
-        if (ShowHint && session.Phase == OverlayPhase.Selecting && !session.IsDragging)
-            DrawHint(dc, full, session);
+    /// <summary>Dims the area around a rectangle with four plain rectangles, which costs far less than cutting a hole out of a shape.</summary>
+    private static void DrawDim(DrawingContext dc, Rect full, Rect? clear)
+    {
+        if (clear is not { } hole || !hole.IntersectsWith(full))
+        {
+            dc.DrawRectangle(Dim, null, full);
+            return;
+        }
+
+        hole.Intersect(full);
+        if (hole.Top > full.Top) dc.DrawRectangle(Dim, null, new Rect(full.Left, full.Top, full.Width, hole.Top - full.Top));
+        if (hole.Bottom < full.Bottom) dc.DrawRectangle(Dim, null, new Rect(full.Left, hole.Bottom, full.Width, full.Bottom - hole.Bottom));
+        if (hole.Height > 0)
+        {
+            if (hole.Left > full.Left) dc.DrawRectangle(Dim, null, new Rect(full.Left, hole.Top, hole.Left - full.Left, hole.Height));
+            if (hole.Right < full.Right) dc.DrawRectangle(Dim, null, new Rect(hole.Right, hole.Top, full.Right - hole.Right, hole.Height));
+        }
     }
 
     private static Rect Deflate(Rect r, double d) =>
@@ -156,7 +179,7 @@ public sealed class OverlayLayer : FrameworkElement
     private static void DrawHandles(DrawingContext dc, Rect rect)
     {
         const double size = 7;
-        var pen = new Pen(Accent, 1.5);
+        var pen = HandlePen;
         foreach (var p in new[]
         {
             rect.TopLeft, new Point(rect.Left + rect.Width / 2, rect.Top), rect.TopRight,
@@ -179,25 +202,55 @@ public sealed class OverlayLayer : FrameworkElement
         dc.DrawRoundedRectangle(LabelBackground, null, new Rect(x, y, w, h), 4, 4);
         dc.DrawText(formatted, new Point(x + 7, y + 3));
     }
+}
 
-    private static void DrawHint(DrawingContext dc, Rect area, OverlaySession session)
+/// <summary>
+/// The line of instructions shown at the top of the monitor until the user does something. It is a
+/// separate element so its text is laid out and painted once, not again with every mouse move.
+/// </summary>
+public sealed class HintView : FrameworkElement
+{
+    private static readonly Brush Backdrop = MakeBackdrop();
+    private FormattedText? _text;
+
+    public HintView()
     {
-        string text = session.Purpose switch
-        {
-            OverlayPurpose.Scrolling => "Select the area that scrolls  ·  Click a window or pane to grab it  ·  Esc to cancel",
-            OverlayPurpose.RecordVideo or OverlayPurpose.RecordGif => "Select the area to record  ·  Click a window to grab it  ·  Esc to cancel",
-            _ => null,
-        } ?? session.Mode switch
-        {
-            OverlayMode.Freeform => "Draw around what you want to capture  ·  Esc to cancel",
-            OverlayMode.Window => "Click a window to capture it  ·  Scroll to pick a part  ·  Esc to cancel",
-            _ => "Drag to select  ·  Click a window to grab it  ·  Scroll for inner parts  ·  Ctrl+A whole screen  ·  Esc to cancel",
-        };
-        var formatted = TextLayout.Create(text, "Segoe UI", 13, false, false, Brushes.White);
-        double w = formatted.Width + 28, h = formatted.Height + 14;
-        var rect = new Rect(area.Left + (area.Width - w) / 2, area.Top + 28, w, h);
-        dc.DrawRoundedRectangle(LabelBackground, null, rect, h / 2, h / 2);
-        dc.DrawText(formatted, new Point(rect.X + 14, rect.Y + 7));
+        IsHitTestVisible = false;
+        SnapsToDevicePixels = true;
+    }
+
+    private static SolidColorBrush MakeBackdrop()
+    {
+        var brush = new SolidColorBrush(Color.FromArgb(230, 0x1F, 0x21, 0x25));
+        brush.Freeze();
+        return brush;
+    }
+
+    public void Configure(OverlaySession? session)
+    {
+        _text = session is null ? null : TextLayout.Create(TextFor(session), "Segoe UI", 13, false, false, Brushes.White);
+        InvalidateVisual();
+    }
+
+    private static string TextFor(OverlaySession session) => session.Purpose switch
+    {
+        OverlayPurpose.Scrolling => "Select the area that scrolls  ·  Click a window or pane to grab it  ·  Esc to cancel",
+        OverlayPurpose.RecordVideo or OverlayPurpose.RecordGif => "Select the area to record  ·  Click a window to grab it  ·  Esc to cancel",
+        _ => null,
+    } ?? session.Mode switch
+    {
+        OverlayMode.Freeform => "Draw around what you want to capture  ·  Esc to cancel",
+        OverlayMode.Window => "Click a window to capture it  ·  Scroll to pick a part  ·  Esc to cancel",
+        _ => "Drag to select  ·  Click a window to grab it  ·  Scroll for inner parts  ·  Ctrl+A whole screen  ·  Esc to cancel",
+    };
+
+    protected override void OnRender(DrawingContext dc)
+    {
+        if (_text is null) return;
+        double w = _text.Width + 28, h = _text.Height + 14;
+        var rect = new Rect((ActualWidth - w) / 2, 28, w, h);
+        dc.DrawRoundedRectangle(Backdrop, null, rect, h / 2, h / 2);
+        dc.DrawText(_text, new Point(rect.X + 14, rect.Y + 7));
     }
 }
 
