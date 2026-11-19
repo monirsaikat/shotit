@@ -39,6 +39,8 @@ public sealed class FeatureActions
         handlers[OverlayAction.SearchImage] = SearchImageAsync;
         handlers[OverlayAction.Share] = ShareAsync;
         handlers[OverlayAction.Print] = PrintAsync;
+        handlers[OverlayAction.SendToSlack] = (result, owner) => SendToChatAsync(ChatApp.Slack, result);
+        handlers[OverlayAction.SendToWhatsApp] = (result, owner) => SendToChatAsync(ChatApp.WhatsApp, result);
     }
 
     /// <summary>Tests replace this to answer confirmation prompts without a dialog.</summary>
@@ -273,6 +275,58 @@ public sealed class FeatureActions
         finally
         {
             deferral.Complete();
+        }
+    }
+
+    // ------------------------------------------------------------------ chat programs
+
+    /// <summary>
+    /// Puts the picture on the clipboard and brings the chat program forward. Neither Slack nor WhatsApp
+    /// lets another program post into a chat, so the user pastes it into the conversation they choose.
+    /// </summary>
+    internal async Task SendToChatAsync(ChatApp chat, CaptureResult result)
+    {
+        string? path = FileFor(result);
+        if (!ClipboardService.SetImage(result.Image, path))
+        {
+            _app.Notifier.Warn($"Could not send to {chat.Name}", "The clipboard is in use by another program. Try again in a moment.");
+            return;
+        }
+
+        string how = $"The picture is copied. Open the chat in {chat.Name} and press Ctrl+V, then Enter.";
+        nint window = chat.FindWindow();
+        if (window != 0 && WindowInterop.ForceForeground(window))
+        {
+            _app.Notifier.Info($"Ready to send in {chat.Name}", how);
+            return;
+        }
+
+        if (await LaunchAsync(chat.LaunchUri))
+        {
+            _app.Notifier.Info($"Opening {chat.Name}", how);
+            return;
+        }
+
+        _app.Log.Information("{Chat} desktop is not installed; offering the web version", chat.Name);
+        _app.Notifier.Warn($"{chat.Name} is not installed",
+            $"The picture is copied. Click here to open {chat.Name} in your browser, then paste it into a chat with Ctrl+V.",
+            () => CaptureActions.OpenUrl(chat.WebUrl));
+    }
+
+    /// <summary>Opens a program through its link scheme. Returns false when no program handles the scheme.</summary>
+    private async Task<bool> LaunchAsync(string uri)
+    {
+        try
+        {
+            var target = new Uri(uri);
+            var support = await global::Windows.System.Launcher.QueryUriSupportAsync(target, global::Windows.System.LaunchQuerySupportType.Uri);
+            if (support != global::Windows.System.LaunchQuerySupportStatus.Available) return false;
+            return await global::Windows.System.Launcher.LaunchUriAsync(target);
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or UnauthorizedAccessException or ArgumentException)
+        {
+            _app.Log.Warning(ex, "Launching {Uri} failed", uri);
+            return false;
         }
     }
 

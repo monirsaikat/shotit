@@ -102,7 +102,6 @@ public static unsafe class WindowInterop
     public static void ShowNoActivate(nint hwnd) => PInvoke.ShowWindow((HWND)hwnd, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
 
     public static void Hide(nint hwnd) => PInvoke.ShowWindow((HWND)hwnd, SHOW_WINDOW_CMD.SW_HIDE);
-
     public static int GetDpi(nint hwnd)
     {
         uint dpi = PInvoke.GetDpiForWindow((HWND)hwnd);

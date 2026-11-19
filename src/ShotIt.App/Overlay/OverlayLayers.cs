@@ -389,6 +389,8 @@ public sealed class ActionBar : Border
 
             Item("Read QR code or barcode", OverlayAction.Qr);
             Item("Search image on the web", OverlayAction.SearchImage);
+            Item("Send to Slack", OverlayAction.SendToSlack);
+            Item("Send to WhatsApp", OverlayAction.SendToWhatsApp);
             Item("Share…", OverlayAction.Share);
             Item("Print…", OverlayAction.Print, "Ctrl+P");
             menu.IsOpen = true;

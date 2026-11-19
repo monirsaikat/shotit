@@ -54,6 +54,12 @@ public enum OverlayAction
     Share,
     Print,
 
+    /// <summary>Copy the picture and switch to the Slack desktop program, ready to paste into a chat.</summary>
+    SendToSlack,
+
+    /// <summary>Copy the picture and switch to WhatsApp Desktop, ready to paste into a chat.</summary>
+    SendToWhatsApp,
+
     /// <summary>Scroll the selected area and capture everything it shows.</summary>
     Scroll,
     RecordVideo,
