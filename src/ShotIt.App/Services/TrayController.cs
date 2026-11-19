@@ -23,6 +23,7 @@ public sealed class TrayController : IDisposable
         Freeform,
         Delayed,
         Scrolling,
+        WebPage,
         RecordVideo,
         RecordGif,
         EditVideo,
@@ -107,6 +108,7 @@ public sealed class TrayController : IDisposable
                 case HotkeyAction.LastRegion: _app.Controller.RepeatLastRegion(); break;
                 case HotkeyAction.DelayedRegion: _app.Controller.StartDelayed(); break;
                 case HotkeyAction.Scrolling: _app.Controller.StartScrolling(); break;
+                case HotkeyAction.WebPage: _ = _app.Controller.StartWebPage(); break;
                 case HotkeyAction.RecordVideo: _app.Controller.StartRecording(RecordingFormat.Video); break;
                 case HotkeyAction.RecordGif: _app.Controller.StartRecording(RecordingFormat.Gif); break;
                 case HotkeyAction.TogglePins: _app.Pins.ToggleAll(); break;
@@ -160,6 +162,7 @@ public sealed class TrayController : IDisposable
             new((int)Command.ActiveWindow, Label("Capture active window", keys.ActiveWindow)),
             new((int)Command.Freeform, Label("Capture freeform shape", keys.Freeform)),
             new((int)Command.Scrolling, Label("Scrolling capture", keys.Scrolling)),
+            new((int)Command.WebPage, Label("Capture whole web page", keys.WebPage)),
             new((int)Command.Delayed, Label(delayed, keys.DelayedRegion)),
             new((int)Command.LastRegion, Label("Repeat last region", keys.LastRegion)) { Enabled = capture.LastRegion is not null },
             new((int)Command.FixedSize, fixedSize),
@@ -215,6 +218,7 @@ public sealed class TrayController : IDisposable
                 case Command.Freeform: _app.Controller.StartRegion(OverlayMode.Freeform); break;
                 case Command.Delayed: _app.Controller.StartDelayed(); break;
                 case Command.Scrolling: _app.Controller.StartScrolling(); break;
+                case Command.WebPage: _ = _app.Controller.StartWebPage(); break;
                 case Command.RecordVideo: _app.Controller.StartRecording(RecordingFormat.Video); break;
                 case Command.RecordGif: _app.Controller.StartRecording(RecordingFormat.Gif); break;
                 case Command.EditVideo: _app.BrowseAndEditVideo(); break;

@@ -199,6 +199,7 @@ public sealed class HotkeySettings
     public Hotkey Freeform { get; set; } = Hotkey.None;
     public Hotkey DelayedRegion { get; set; } = Hotkey.None;
     public Hotkey Scrolling { get; set; } = Hotkey.None;
+    public Hotkey WebPage { get; set; } = Hotkey.None;
     public Hotkey RecordVideo { get; set; } = Hotkey.None;
     public Hotkey RecordGif { get; set; } = Hotkey.None;
     public Hotkey TogglePins { get; set; } = new(HotkeyModifiers.Ctrl | HotkeyModifiers.Shift, 'P');

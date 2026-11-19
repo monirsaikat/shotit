@@ -99,6 +99,7 @@ internal static partial class SelfTest
                     case "video": await VideoEditing(services, report, output); break;
                     case "ocr": await TextReading(report, output); break;
                     case "policy": await Policy(services, report, output); break;
+                    case "webpage": await WebPageArea(report, output); break;
                     default: report.Failures.Add("Unknown scenario: " + scenario); break;
                 }
             }
@@ -346,6 +347,31 @@ internal static partial class SelfTest
         report.Check(same < expected.Width * expected.Height / 2, "An overlay window is still covering the screen after the session ended");
     }
 
+    /// <summary>
+    /// Finds the page area in an open browser without touching it (no focus change, no scrolling) and saves
+    /// what the browser shows there, so the rectangle can be checked by eye.
+    /// </summary>
+    private static async Task WebPageArea(Report report, string output)
+    {
+        var browser = WebPageCapture.FindBrowser(0);
+        report.Check(browser is not null, "No browser window is open");
+        if (browser is null) return;
+        var window = WindowList.GetBounds(browser.Handle);
+        var area = await WebPageCapture.FindPageAreaAsync(browser);
+        report.Values["browser"] = WindowList.GetProcessName(browser.ProcessId);
+        report.Values["window"] = window.ToString();
+        report.Values["page"] = area?.ToString() ?? "not found";
+        report.Check(area is not null, "The page area was not found");
+        if (area is not { } page) return;
+        report.Check(page.Y > window.Y + 30, "The page area starts at the top of the window, so it includes the tabs");
+        if (GdiScreen.PrintWindow(browser.Handle) is { } picture)
+        {
+            SavePng(picture, Path.Combine(output, "browser.png"));
+            var inside = new PixelRect(page.X - window.X, page.Y - window.Y, page.Width, page.Height).Intersect(new PixelRect(0, 0, picture.Width, picture.Height));
+            if (inside.Width > 0 && inside.Height > 0) SavePng(picture.Crop(inside), Path.Combine(output, "page.png"));
+        }
+    }
+
     private static async Task Editor(AppServices app, Report report, string output)
     {
         var image = new PixelBuffer(900, 560);
@@ -585,6 +611,9 @@ internal static partial class SelfTest
         report.Check(app.Notifier.Last?.Title == "No code found", "Scanning an image without a code did not say so");
 
         // --- upload ---
+        // Nothing is set up: decline the offer of a free link, so the self-test never sends anything online.
+        var confirm = app.Features.Confirm;
+        app.Features.Confirm = (title, text, owner) => title != "Get a free link?" && confirm(title, text, owner);
         app.Notifier.Reset();
         app.Actions.Run(ocrSource, OverlayAction.Upload);
         for (int i = 0; i < 30 && app.Notifier.Last is null; i++) await Task.Delay(100);

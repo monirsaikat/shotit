@@ -193,6 +193,7 @@ public sealed class SettingsWindow : Window
         AddHotkey(p, "Capture freeform shape", HotkeyAction.Freeform, () => h.Freeform, v => h.Freeform = v);
         AddHotkey(p, "Capture after a delay", HotkeyAction.DelayedRegion, () => h.DelayedRegion, v => h.DelayedRegion = v);
         AddHotkey(p, "Scrolling capture", HotkeyAction.Scrolling, () => h.Scrolling, v => h.Scrolling = v);
+        AddHotkey(p, "Whole web page", HotkeyAction.WebPage, () => h.WebPage, v => h.WebPage = v);
         AddHotkey(p, "Record video (press again to stop)", HotkeyAction.RecordVideo, () => h.RecordVideo, v => h.RecordVideo = v);
         AddHotkey(p, "Record GIF (press again to stop)", HotkeyAction.RecordGif, () => h.RecordGif, v => h.RecordGif = v);
         AddHotkey(p, "Show or hide pinned images", HotkeyAction.TogglePins, () => h.TogglePins, v => h.TogglePins = v);
@@ -233,7 +234,7 @@ public sealed class SettingsWindow : Window
         {
             (HotkeyAction.Region, _s.Hotkeys.Region), (HotkeyAction.Window, _s.Hotkeys.Window), (HotkeyAction.FullScreen, _s.Hotkeys.FullScreen),
             (HotkeyAction.ActiveWindow, _s.Hotkeys.ActiveWindow), (HotkeyAction.LastRegion, _s.Hotkeys.LastRegion), (HotkeyAction.Freeform, _s.Hotkeys.Freeform),
-            (HotkeyAction.DelayedRegion, _s.Hotkeys.DelayedRegion), (HotkeyAction.Scrolling, _s.Hotkeys.Scrolling), (HotkeyAction.RecordVideo, _s.Hotkeys.RecordVideo), (HotkeyAction.RecordGif, _s.Hotkeys.RecordGif), (HotkeyAction.TogglePins, _s.Hotkeys.TogglePins),
+            (HotkeyAction.DelayedRegion, _s.Hotkeys.DelayedRegion), (HotkeyAction.Scrolling, _s.Hotkeys.Scrolling), (HotkeyAction.WebPage, _s.Hotkeys.WebPage), (HotkeyAction.RecordVideo, _s.Hotkeys.RecordVideo), (HotkeyAction.RecordGif, _s.Hotkeys.RecordGif), (HotkeyAction.TogglePins, _s.Hotkeys.TogglePins),
             (HotkeyAction.PinClipboard, _s.Hotkeys.PinClipboard), (HotkeyAction.OpenHistory, _s.Hotkeys.OpenHistory),
         };
         foreach (var (action, status) in _hotkeyStatus)
@@ -480,7 +481,7 @@ public sealed class SettingsWindow : Window
                 return;
             case UploadProvider.FreeLink:
                 p.Children.Add(Ui.Row("Link lasts", Ui.Combo(FreeLinkUploader.Expiries, u.FreeLinkExpiry, v => { u.FreeLinkExpiry = v; Changed(); }),
-                    "Links that expire go to Litterbox, permanent ones to Catbox. Both are free public hosts run by volunteers: anyone who has the link can see the picture, and a permanent link cannot be deleted later. Some networks block them."));
+                    "Free public hosts run by volunteers: Litterbox for links that expire, Catbox for permanent ones, Uguu for 3 hours. Anyone who has the link can see the picture, and a link cannot be deleted before it expires. If Catbox is blocked on your network, Uguu is used instead and the link works for 3 hours."));
                 break;
             case UploadProvider.Imgur:
                 p.Children.Add(Ui.Row("Client ID", Field(u.ImgurClientId, v => u.ImgurClientId = v),

@@ -109,6 +109,7 @@ public enum AppCommand
     CaptureFreeform,
     CaptureDelayed,
     CaptureScrolling,
+    CaptureWebPage,
     RecordVideo,
     RecordGif,
     EditFile,
@@ -146,6 +147,7 @@ public sealed record AppCommandLine(AppCommand Command, string? Argument = null,
                         "freeform" => AppCommand.CaptureFreeform,
                         "delayed" => AppCommand.CaptureDelayed,
                         "scrolling" or "scroll" => AppCommand.CaptureScrolling,
+                        "webpage" or "page" => AppCommand.CaptureWebPage,
                         _ => AppCommand.CaptureRegion,
                     };
                     break;

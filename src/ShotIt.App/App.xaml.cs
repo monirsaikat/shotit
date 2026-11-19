@@ -160,6 +160,7 @@ public partial class App : Application
                 case AppCommand.CaptureActiveWindow: services.Controller.CaptureActiveWindow(); break;
                 case AppCommand.CaptureDelayed: services.Controller.StartDelayed(); break;
                 case AppCommand.CaptureScrolling: services.Controller.StartScrolling(); break;
+                case AppCommand.CaptureWebPage: _ = services.Controller.StartWebPage(); break;
                 case AppCommand.RecordVideo: services.Controller.StartRecording(RecordingFormat.Video); break;
                 case AppCommand.RecordGif: services.Controller.StartRecording(RecordingFormat.Gif); break;
                 case AppCommand.EditFile:

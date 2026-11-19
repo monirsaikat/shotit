@@ -36,6 +36,7 @@ public sealed class CaptureController
     private OverlaySession? _session;
     private CountdownWindow? _countdown;
     private ScrollCaptureSession? _scroll;
+    private bool _webPageStarting;
     private RecordingSession? _recording;
     private int _selectionCopy;
 
@@ -299,6 +300,48 @@ public sealed class CaptureController
         if (IsSessionActive) return;
         // Any action other than the toolbar makes the session report the region as soon as it is selected.
         StartRegion(OverlayMode.Region, afterRegionOverride: AfterCaptureAction.Copy, purpose: OverlayPurpose.Scrolling);
+    }
+
+    /// <summary>
+    /// Captures the whole web page in the browser: finds the page area, scrolls it to the top, then runs a
+    /// scrolling capture over it. Uses the page as the browser shows it, so signed-in pages work too.
+    /// </summary>
+    public async Task StartWebPage()
+    {
+        if (IsSessionActive || _webPageStarting) return;
+        _webPageStarting = true;
+        var pointer = Monitors.GetCursorPosition();
+        try
+        {
+            if (WebPageCapture.FindBrowser(WindowList.GetForeground()) is not { } browser)
+            {
+                _app.Notifier.Warn("No browser found", "Open the page in Chrome, Edge, Firefox or another browser first, then capture it again.");
+                return;
+            }
+
+            WindowInterop.ForceForeground(browser.Handle);
+            await Task.Delay(200);
+            if (await WebPageCapture.FindPageAreaAsync(browser) is not { } area)
+            {
+                _log.Information("Web page capture: no page area found in {Process}", WindowList.GetProcessName(browser.ProcessId));
+                _app.Notifier.Warn("Could not find the page", "ShotIt could not tell where the page is in this browser window. Use Scrolling capture and select the page instead.",
+                    StartScrolling);
+                return;
+            }
+
+            _log.Information("Web page capture of {Area} in {Process}", area, WindowList.GetProcessName(browser.ProcessId));
+            await WebPageCapture.ScrollToTopAsync(area);
+            await StartScrollingAt(area);
+        }
+        catch (TimeoutException)
+        {
+            _app.Notifier.Warn("Could not find the page", "The browser took too long to answer. Use Scrolling capture and select the page instead.");
+        }
+        finally
+        {
+            _webPageStarting = false;
+            MouseInput.MoveTo(pointer);
+        }
     }
 
     private (string App, string Title) DescribeSource(PixelRect region)

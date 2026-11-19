@@ -94,6 +94,7 @@ public enum HotkeyAction
     Scrolling,
     RecordVideo,
     RecordGif,
+    WebPage,
 
     /// <summary>Registered only while a capture session is open, so Esc always works even without focus.</summary>
     SessionEscape = 100,
@@ -129,6 +130,7 @@ public sealed class HotkeyManager : IDisposable
         (HotkeyAction.Freeform, s.Freeform),
         (HotkeyAction.DelayedRegion, s.DelayedRegion),
         (HotkeyAction.Scrolling, s.Scrolling),
+        (HotkeyAction.WebPage, s.WebPage),
         (HotkeyAction.RecordVideo, s.RecordVideo),
         (HotkeyAction.RecordGif, s.RecordGif),
         (HotkeyAction.TogglePins, s.TogglePins),

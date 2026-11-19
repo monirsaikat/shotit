@@ -2,7 +2,8 @@ namespace ShotIt.Core.Upload;
 
 public sealed record UploadRequest(byte[] Data, string FileName, string ContentType);
 
-public sealed record UploadResult(string Url, string? DeleteUrl = null);
+/// <param name="Note">Something the user should know about this link, such as it expiring sooner than chosen.</param>
+public sealed record UploadResult(string Url, string? DeleteUrl = null, string? Note = null);
 
 /// <summary>Thrown for any upload failure with a message that is safe and useful to show the user.</summary>
 public sealed class UploadException : Exception

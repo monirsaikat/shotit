@@ -148,6 +148,17 @@ public static unsafe class MouseInput
 {
     public static bool MoveTo(PixelPoint point) => PInvoke.SetCursorPos(point.X, point.Y);
 
+    /// <summary>Turns the wheel away from the user, which scrolls the window under the pointer up. No pause between notches.</summary>
+    public static bool WheelUp(int notches)
+    {
+        const int WheelDelta = 120;
+        INPUT input = default;
+        input.type = INPUT_TYPE.INPUT_MOUSE;
+        input.Anonymous.mi.dwFlags = MOUSE_EVENT_FLAGS.MOUSEEVENTF_WHEEL;
+        input.Anonymous.mi.mouseData = (uint)(WheelDelta * Math.Clamp(notches, 1, 100));
+        return PInvoke.SendInput(1, &input, sizeof(INPUT)) == 1;
+    }
+
     /// <summary>Turns the wheel towards the user by a number of notches, which scrolls the window under the pointer down.</summary>
     public static bool WheelDown(int notches)
     {
@@ -165,6 +176,26 @@ public static unsafe class MouseInput
         }
 
         return ok;
+    }
+}
+
+/// <summary>Presses keys on the user's behalf.</summary>
+public static unsafe class KeyboardInput
+{
+    public const int Home = 0x24;
+
+    /// <summary>Presses and releases one key in the foreground window.</summary>
+    public static bool Tap(int virtualKey)
+    {
+        Span<INPUT> inputs = stackalloc INPUT[2];
+        for (int i = 0; i < 2; i++)
+        {
+            inputs[i].type = INPUT_TYPE.INPUT_KEYBOARD;
+            inputs[i].Anonymous.ki.wVk = (VIRTUAL_KEY)virtualKey;
+            inputs[i].Anonymous.ki.dwFlags = i == 1 ? KEYBD_EVENT_FLAGS.KEYEVENTF_KEYUP : 0;
+        }
+
+        return PInvoke.SendInput(inputs, sizeof(INPUT)) == 2;
     }
 }
 

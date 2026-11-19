@@ -75,7 +75,11 @@ public sealed class FeatureActions
             // Nothing is set up yet: offer the free host instead of sending the user to settings.
             if (!Confirm("Get a free link?",
                     $"{purpose}\n\nNo upload destination is set up yet. ShotIt can use Litterbox, a free host that needs no account: the link works for 3 days, and anyone who has it can see the picture.\n\nOther destinations and link lengths are in Settings › Upload.", owner))
+            {
+                _app.Notifier.Warn("Upload is not set up", "Choose where screenshots are uploaded in Settings › Upload.", () => WindowsHost.OpenSettings(_app, "Upload"));
                 return null;
+            }
+
             settings.Provider = UploadProvider.FreeLink;
             settings.FreeLinkExpiry = "72h";
             _app.SaveSettingsSoon();
@@ -129,7 +133,8 @@ public sealed class FeatureActions
         bool isWeb = Uri.TryCreate(uploaded.Url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
         bool copied = settings.CopyUrlAfterUpload && ClipboardService.SetText(uploaded.Url);
         if (settings.OpenUrlAfterUpload && isWeb) CaptureActions.OpenUrl(uploaded.Url);
-        _app.Notifier.Info(copied ? "Link copied" : "Uploaded", uploaded.Url, () =>
+        string text = uploaded.Note is { Length: > 0 } note ? uploaded.Url + Environment.NewLine + note : uploaded.Url;
+        _app.Notifier.Info(copied ? "Link copied" : "Uploaded", text, () =>
         {
             if (isWeb) CaptureActions.OpenUrl(uploaded.Url);
             else CaptureActions.RevealInExplorer(uploaded.Url);

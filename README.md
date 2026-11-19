@@ -11,6 +11,7 @@ No account, no telemetry, no advertising. Nothing leaves the computer unless you
 
 - Region, window or control (hover to snap), full screen, active window, freeform shape, fixed size, delayed, repeat last region
 - Scrolling capture: select the part of a window that scrolls and ShotIt scrolls it to the end and joins everything into one tall picture
+- Whole web page: one click captures the entire page open in Chrome, Edge, Firefox or another browser, signed-in pages included
 - A magnifier with pixel colour while selecting, and keyboard nudging to the pixel
 - Works across several monitors, including ones left of or above the primary
 - Falls back to GPU capture for full-screen games and video
@@ -33,7 +34,7 @@ No account, no telemetry, no advertising. Nothing leaves the computer unless you
 
 - Arrow, line, rectangle, ellipse, pen
 - Highlighter (a real multiply blend, like a marker), area highlight, spotlight
-- Text, callout, numbered steps, stickers
+- Text, callout, numbered steps, stickers and colour emoji (a searchable picker under Sticker › Emoji…)
 - Blur, pixelate, solid redaction
 - Magnifier inset, ruler with pixel measurements
 - Crop, rotate, flip, resize, brightness and contrast
@@ -43,10 +44,11 @@ No account, no telemetry, no advertising. Nothing leaves the computer unless you
 **Do something with it**
 
 - Copy, save (PNG, JPEG, BMP, PDF), save as, print, Windows share sheet
+- Send to Slack or WhatsApp: the picture is copied and the app comes to the front, ready to paste into a chat
 - Pin to the screen: always on top, zoomable, click-through, optionally back after a restart
 - Read the text in the capture, fully offline: the languages Windows has installed, plus Bengali (বাংলা), which ShotIt reads itself
 - Read QR codes and barcodes
-- Upload to Imgur, S3-compatible storage, SFTP, FTP, your own web address or a folder, and get the link
+- Get a free link with no account (Catbox, or Litterbox for links that expire), or upload to Imgur, S3-compatible storage, SFTP, FTP, your own web address or a folder
 - Search the web for the image
 
 **Keep track**
@@ -85,6 +87,9 @@ Every hotkey can be changed in Settings. Right-click the tray icon for everythin
 Scrolling capture is in the tray menu and under "More actions" on the capture toolbar, and can be given a hotkey in Settings.
 Select the area that scrolls (a click on a window or pane selects it). ShotIt then turns the mouse wheel for you until the end of
 the page. Press Esc or move the mouse to stop early and keep what was captured; the Cancel button throws it away.
+
+"Capture whole web page" (tray menu, or a hotkey you set in Settings) does the same for the browser window in front:
+it finds the page, scrolls it back to the top and captures it to the end. The page's scrollbar is left out.
 
 Recording is in the same places: "Record video (MP4)" and "Record GIF" in the tray menu, "More actions" on the capture toolbar,
 and two hotkeys you can set in Settings. Select the area and recording starts at once. Stop with Esc, the tick on the small panel,
