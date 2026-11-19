@@ -5,6 +5,9 @@
     <UseWPF>true</UseWPF>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Vortice.Direct2D1" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\ShotIt.Core\ShotIt.Core.csproj" />
   </ItemGroup>
 </Project>

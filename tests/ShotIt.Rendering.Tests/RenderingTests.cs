@@ -362,3 +362,72 @@ public class RenderingTests
         Assert.True(new FileInfo(path).Length > 10_000);
     });
 }
+
+public class EmojiTests
+{
+    [Theory]
+    [InlineData("😀", true)]
+    [InlineData("👍🏽", true)]
+    [InlineData("❤️", true)]
+    [InlineData("👨‍💻", true)]
+    [InlineData("🇧🇩", true)]
+    [InlineData("check", false)]
+    [InlineData("Z", false)]
+    [InlineData("", false)]
+    public void RecognisesEmoji(string text, bool expected) => Assert.Equal(expected, EmojiRenderer.IsEmoji(text));
+
+    [Fact]
+    public void EmojiStickerIsDrawnInColour()
+    {
+        Sta.Run(() =>
+        {
+            var background = new PixelBuffer(120, 120);
+            background.Fill(ColorRgba.White);
+            var doc = new DocState(background, [new StickerAnnotation { Rect = new(10, 10, 100, 100), Glyph = "😀" }]);
+            var image = DocumentRenderer.Flatten(doc);
+
+            // The grinning face is yellow: plenty of pixels with strong red and green and little blue.
+            int yellow = 0;
+            for (int y = 0; y < image.Height; y++)
+            {
+                for (int x = 0; x < image.Width; x++)
+                {
+                    var c = image.GetPixel(x, y);
+                    if (c.R > 200 && c.G > 150 && c.B < 100) yellow++;
+                }
+            }
+
+            Assert.True(yellow > 800, $"Only {yellow} yellow pixels; the emoji was not drawn in colour.");
+        });
+    }
+}
+
+public class EmojiCatalogTests
+{
+    [Fact]
+    public void EveryEntryIsAnEmojiWithWords()
+    {
+        foreach (var entry in EmojiCatalog.All)
+        {
+            Assert.True(EmojiRenderer.IsEmoji(entry.Emoji), $"{entry.Emoji} ({entry.Keywords}) is not recognised as an emoji");
+            Assert.False(string.IsNullOrWhiteSpace(entry.Keywords));
+        }
+    }
+
+    [Fact]
+    public void NoEmojiIsListedTwice()
+    {
+        var duplicates = EmojiCatalog.All.GroupBy(e => e.Emoji).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
+        Assert.Empty(duplicates);
+    }
+
+    [Theory]
+    [InlineData("thumbs up", "👍")]
+    [InlineData("check", "✅")]
+    [InlineData("BANGLA", "🇧🇩")]
+    [InlineData("fire", "🔥")]
+    public void SearchFindsTheEmoji(string query, string expected) => Assert.Equal(expected, EmojiCatalog.Search(query)[0].Emoji);
+
+    [Fact]
+    public void EmptySearchFindsNothing() => Assert.Empty(EmojiCatalog.Search("   "));
+}

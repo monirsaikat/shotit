@@ -644,7 +644,13 @@ public sealed class EditorSession
             {
                 var draft = Draft;
                 Draft = null;
-                if (draft is null || !drag.Moved)
+                if (!drag.Moved && Tool == ToolKind.Sticker)
+                {
+                    // A click places the sticker at a comfortable size; dragging chooses the size.
+                    double size = Math.Clamp(Math.Min(State.Base.Width, State.Base.Height) / 8.0, 32, 96);
+                    draft = new StickerAnnotation { Id = Guid.NewGuid(), Rect = new RectD(p.X - size / 2, p.Y - size / 2, size, size), Glyph = Options.Sticker };
+                }
+                else if (draft is null || !drag.Moved)
                 {
                     RaiseChanged();
                     break;

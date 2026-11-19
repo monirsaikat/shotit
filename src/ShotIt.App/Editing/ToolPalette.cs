@@ -316,6 +316,10 @@ public sealed class ToolPalette : Border
                     stickers.Items.Add(item);
                 }
 
+                stickers.Items.Add(new Separator());
+                var emoji = new MenuItem { Header = "Emoji…", Icon = EmojiPicker.Glyph("😀", 16) };
+                emoji.Click += (_, _) => ShowEmojiPopup();
+                stickers.Items.Add(emoji);
                 menu.Items.Add(stickers);
                 continue;
             }
@@ -391,6 +395,18 @@ public sealed class ToolPalette : Border
 
     /// <summary>Sets the main colour from outside (the eyedropper).</summary>
     public void SetColor(ColorRgba color) => Commit(_session.Options with { Color = color });
+
+    private void ShowEmojiPopup()
+    {
+        var picker = new EmojiPicker(emoji =>
+        {
+            _popup.IsOpen = false;
+            _session.SetOptions(_session.Options with { Sticker = emoji }, applyToSelection: true);
+            _session.SetTool(ToolKind.Sticker);
+            OptionsChanged?.Invoke(_session.Options);
+        });
+        OpenPopup(_moreButton, PopupShell(picker));
+    }
 
     private void ShowSizePopup()
     {

@@ -504,7 +504,7 @@ public sealed class AnnotationRenderer
     }
 }
 
-/// <summary>Built-in vector stickers. Drawn as shapes because WPF renders emoji in monochrome.</summary>
+/// <summary>Built-in vector stickers, plus any emoji (drawn in colour by <see cref="EmojiRenderer"/>).</summary>
 public static class Stickers
 {
     public static IReadOnlyList<string> Names { get; } = ["check", "cross", "warning", "info", "question", "star", "heart", "pointer"];
@@ -586,6 +586,7 @@ public static class Stickers
             }
             default:
             {
+                if (EmojiRenderer.IsEmoji(glyph) && EmojiRenderer.Draw(dc, glyph, rect)) break;
                 var text = TextLayout.Create(string.IsNullOrEmpty(glyph) ? "?" : glyph, "Segoe UI Emoji", s * 0.7, false, false, Brush(0x20, 0x20, 0x20));
                 dc.DrawText(text, new Point(center.X - text.Width / 2, center.Y - text.Height / 2));
                 break;

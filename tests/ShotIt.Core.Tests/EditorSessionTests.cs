@@ -47,12 +47,28 @@ public class EditorSessionTests
     [MemberData(nameof(DragTools))]
     public void A_click_without_drag_creates_nothing(ToolKind tool)
     {
+        if (tool == ToolKind.Sticker) return; // a click places a sticker; covered below
         var s = New();
         s.SetTool(tool);
         s.PointerDown(new Vec2(50, 50), PointerModifiers.None, 4);
         s.PointerUp(new Vec2(51, 50), PointerModifiers.None);
         Assert.Empty(s.State.Items);
         Assert.False(s.CanUndo);
+    }
+
+    [Fact]
+    public void A_click_with_the_sticker_tool_places_the_chosen_emoji()
+    {
+        var s = New();
+        s.SetOptions(s.Options with { Sticker = "👍" });
+        s.SetTool(ToolKind.Sticker);
+        s.PointerDown(new Vec2(200, 150), PointerModifiers.None, 4);
+        s.PointerUp(new Vec2(200, 150), PointerModifiers.None);
+        var sticker = Assert.IsType<StickerAnnotation>(Assert.Single(s.State.Items));
+        Assert.Equal("👍", sticker.Glyph);
+        Assert.Equal(200, sticker.Rect.X + sticker.Rect.Width / 2, 3);
+        Assert.True(sticker.Rect.Width >= 32);
+        Assert.True(s.CanUndo);
     }
 
     [Fact]

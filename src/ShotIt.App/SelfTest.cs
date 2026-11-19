@@ -360,14 +360,29 @@ internal static partial class SelfTest
             .Add(new HighlighterAnnotation { Points = [new(60, 300), new(420, 300)] })
             .Add(new BlurAnnotation { Rect = new(480, 260, 300, 120) })
             .Add(new StepAnnotation { Center = new(100, 420), Number = 1 })
-            .Add(new CalloutAnnotation { Box = new(520, 420, 220, 70), Tail = new(470, 520), Text = "Editor self-test" });
+            .Add(new CalloutAnnotation { Box = new(520, 420, 220, 70), Tail = new(470, 520), Text = "Editor self-test" })
+            .Add(new StickerAnnotation { Rect = new(300, 380, 90, 90), Glyph = "🎉" });
 
         var window = app.OpenEditor(new CaptureResult(doc));
         await Settle(900);
         SaveWindowPicture(window, Path.Combine(output, "editor.png"));
 
         var session = window.Session;
-        report.Check(session.State.Items.Count == 6, "Editor did not load the annotations");
+        report.Check(session.State.Items.Count == 7, "Editor did not load the annotations");
+
+        // The emoji picker, on its own, so its picture shows whether emoji are drawn in colour.
+        var picker = new Window
+        {
+            Title = "Emoji picker",
+            SizeToContent = SizeToContent.WidthAndHeight,
+            ResizeMode = ResizeMode.NoResize,
+            Background = (Brush)Application.Current.FindResource("BarBackground"),
+            Content = new System.Windows.Controls.Border { Padding = new Thickness(10), Child = new ShotIt.App.Editing.EmojiPicker(_ => { }) },
+        };
+        picker.Show();
+        await Settle(500);
+        SaveWindowPicture(picker, Path.Combine(output, "emoji-picker.png"));
+        picker.Close();
         session.SetTool(ToolKind.Select);
         session.SelectAll();
         session.NudgeSelected(new Vec2(5, 5));
