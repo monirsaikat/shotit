@@ -519,6 +519,7 @@ public static class UploaderFactory
             UploadProvider.Sftp => new SftpUploader(settings, secrets.Unprotect(settings.FtpPasswordProtected)),
             UploadProvider.CustomHttp => new CustomHttpUploader(settings),
             UploadProvider.LocalFolder => new LocalFolderUploader(settings),
+            UploadProvider.FreeLink => new FreeLinkUploader(settings.FreeLinkExpiry),
             _ => throw new UploadException("No upload destination is set up yet. Choose one in Settings › Upload."),
         };
     }

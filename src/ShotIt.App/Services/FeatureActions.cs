@@ -67,6 +67,19 @@ public sealed class FeatureActions
             return null;
         }
 
+        bool askedAlready = false;
+        if (settings.Provider == UploadProvider.None)
+        {
+            // Nothing is set up yet: offer the free host instead of sending the user to settings.
+            if (!Confirm("Get a free link?",
+                    $"{purpose}\n\nNo upload destination is set up yet. ShotIt can use Litterbox, a free host that needs no account: the link works for 3 days, and anyone who has it can see the picture.\n\nOther destinations and link lengths are in Settings › Upload.", owner))
+                return null;
+            settings.Provider = UploadProvider.FreeLink;
+            settings.FreeLinkExpiry = "72h";
+            _app.SaveSettingsSoon();
+            askedAlready = true;
+        }
+
         IUploader uploader;
         try
         {
@@ -78,7 +91,7 @@ public sealed class FeatureActions
             return null;
         }
 
-        if (settings.ConfirmBeforeUpload &&
+        if (settings.ConfirmBeforeUpload && !askedAlready &&
             !Confirm("Upload screenshot", $"{purpose}\n\nThe image will be sent to {uploader.Name}. Anyone who has the link will be able to see it.", owner))
             return null;
 

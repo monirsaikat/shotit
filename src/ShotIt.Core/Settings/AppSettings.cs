@@ -155,6 +155,9 @@ public enum UploadProvider
     Sftp,
     CustomHttp,
     LocalFolder,
+
+    /// <summary>A free public host that needs no account (Catbox, or Litterbox for links that expire).</summary>
+    FreeLink,
 }
 
 public enum RecordingFormat
@@ -278,6 +281,9 @@ public sealed class UploadSettings
 
     // Secrets below are stored encrypted (DPAPI) as base64; see ISecretProtector.
     public string ImgurClientId { get; set; } = string.Empty;
+
+    /// <summary>How long a free link lasts: 1h, 12h, 24h or 72h, or "never" for a permanent link.</summary>
+    public string FreeLinkExpiry { get; set; } = "72h";
 
     public string S3Endpoint { get; set; } = string.Empty;
     public string S3Region { get; set; } = "us-east-1";

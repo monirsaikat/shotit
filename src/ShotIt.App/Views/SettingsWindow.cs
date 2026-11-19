@@ -445,6 +445,7 @@ public sealed class SettingsWindow : Window
         p.Children.Add(Ui.Row("Upload to", Ui.Combo(
             [
                 (UploadProvider.None, "Nowhere (uploads are off)"),
+                (UploadProvider.FreeLink, "Free link, no account needed (Catbox)"),
                 (UploadProvider.Imgur, "Imgur"),
                 (UploadProvider.S3, "Amazon S3 or compatible (R2, MinIO, B2)"),
                 (UploadProvider.Sftp, "SFTP server"),
@@ -477,6 +478,10 @@ public sealed class SettingsWindow : Window
         {
             case UploadProvider.None:
                 return;
+            case UploadProvider.FreeLink:
+                p.Children.Add(Ui.Row("Link lasts", Ui.Combo(FreeLinkUploader.Expiries, u.FreeLinkExpiry, v => { u.FreeLinkExpiry = v; Changed(); }),
+                    "Links that expire go to Litterbox, permanent ones to Catbox. Both are free public hosts run by volunteers: anyone who has the link can see the picture, and a permanent link cannot be deleted later. Some networks block them."));
+                break;
             case UploadProvider.Imgur:
                 p.Children.Add(Ui.Row("Client ID", Field(u.ImgurClientId, v => u.ImgurClientId = v),
                     "Create a free “anonymous usage” application at api.imgur.com and paste its Client ID here. Uploads are public to anyone who has the link."));
