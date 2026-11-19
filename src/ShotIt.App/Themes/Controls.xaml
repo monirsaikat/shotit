@@ -5,33 +5,41 @@
        that stays readable over anything, independent of the system theme. -->
   <Color x:Key="AccentColor">#FF3D7BFF</Color>
   <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
-  <SolidColorBrush x:Key="BarBackground" Color="#F21F2125" />
-  <SolidColorBrush x:Key="BarBorder" Color="#40FFFFFF" />
-  <SolidColorBrush x:Key="BarForeground" Color="#FFF2F3F5" />
-  <SolidColorBrush x:Key="BarHover" Color="#2EFFFFFF" />
-  <SolidColorBrush x:Key="BarPressed" Color="#47FFFFFF" />
-  <SolidColorBrush x:Key="BarSeparator" Color="#33FFFFFF" />
+  <SolidColorBrush x:Key="AccentHover" Color="#FF5A8FFF" />
+  <SolidColorBrush x:Key="AccentPressed" Color="#FF2F66E0" />
+  <SolidColorBrush x:Key="DangerBrush" Color="#FFE5484D" />
+  <SolidColorBrush x:Key="BarBackground" Color="#F516171B" />
+  <SolidColorBrush x:Key="BarBorder" Color="#24FFFFFF" />
+  <SolidColorBrush x:Key="BarForeground" Color="#FFECEEF2" />
+  <SolidColorBrush x:Key="BarMuted" Color="#99ECEEF2" />
+  <SolidColorBrush x:Key="BarHover" Color="#1CFFFFFF" />
+  <SolidColorBrush x:Key="BarPressed" Color="#30FFFFFF" />
+  <SolidColorBrush x:Key="BarSeparator" Color="#1FFFFFFF" />
+  <SolidColorBrush x:Key="KeyCapBackground" Color="#1FFFFFFF" />
 
   <Style x:Key="BarPanel" TargetType="Border">
     <Setter Property="Background" Value="{StaticResource BarBackground}" />
     <Setter Property="BorderBrush" Value="{StaticResource BarBorder}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="8" />
-    <Setter Property="Padding" Value="4" />
+    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="Padding" Value="5" />
     <Setter Property="SnapsToDevicePixels" Value="True" />
     <Setter Property="Effect">
       <Setter.Value>
-        <DropShadowEffect BlurRadius="14" ShadowDepth="2" Direction="270" Opacity="0.45" Color="Black" />
+        <DropShadowEffect BlurRadius="26" ShadowDepth="6" Direction="270" Opacity="0.5" Color="Black" RenderingBias="Performance" />
       </Setter.Value>
     </Setter>
   </Style>
 
   <Style x:Key="BarSeparatorStyle" TargetType="Rectangle">
     <Setter Property="Width" Value="1" />
-    <Setter Property="Margin" Value="4,6" />
+    <Setter Property="Height" Value="20" />
+    <Setter Property="Margin" Value="6,0" />
+    <Setter Property="VerticalAlignment" Value="Center" />
     <Setter Property="Fill" Value="{StaticResource BarSeparator}" />
   </Style>
 
+  <!-- Icons are drawn on a 16-unit grid and shown slightly larger, which reads better on a dark bar. -->
   <Style x:Key="BarIcon" TargetType="Path">
     <Setter Property="Width" Value="16" />
     <Setter Property="Height" Value="16" />
@@ -42,22 +50,29 @@
     <Setter Property="StrokeLineJoin" Value="Round" />
     <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentControl}}" />
     <Setter Property="IsHitTestVisible" Value="False" />
+    <Setter Property="LayoutTransform">
+      <Setter.Value>
+        <ScaleTransform ScaleX="1.125" ScaleY="1.125" />
+      </Setter.Value>
+    </Setter>
   </Style>
 
   <Style x:Key="BarButton" TargetType="Button">
-    <Setter Property="Width" Value="32" />
-    <Setter Property="Height" Value="32" />
-    <Setter Property="Margin" Value="1" />
+    <Setter Property="Width" Value="34" />
+    <Setter Property="Height" Value="34" />
+    <Setter Property="Margin" Value="1,0" />
     <Setter Property="Foreground" Value="{StaticResource BarForeground}" />
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="Focusable" Value="False" />
     <Setter Property="Cursor" Value="Arrow" />
-    <Setter Property="ToolTipService.InitialShowDelay" Value="350" />
+    <Setter Property="ToolTipService.InitialShowDelay" Value="400" />
+    <Setter Property="ToolTipService.BetweenShowDelay" Value="80" />
     <Setter Property="ToolTipService.Placement" Value="Bottom" />
+    <Setter Property="ToolTipService.VerticalOffset" Value="6" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="Button">
-          <Border x:Name="Chrome" Background="{TemplateBinding Background}" CornerRadius="5" SnapsToDevicePixels="True">
+          <Border x:Name="Chrome" Background="{TemplateBinding Background}" CornerRadius="8" SnapsToDevicePixels="True">
             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Border>
           <ControlTemplate.Triggers>
@@ -68,7 +83,57 @@
               <Setter TargetName="Chrome" Property="Background" Value="{StaticResource BarPressed}" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Opacity" Value="0.35" />
+              <Setter Property="Opacity" Value="0.3" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- The main action of a bar (Copy): a filled button with a label, so it is found without reading tooltips. -->
+  <Style x:Key="BarPrimaryButton" TargetType="Button" BasedOn="{StaticResource BarButton}">
+    <Setter Property="Width" Value="Auto" />
+    <Setter Property="Padding" Value="11,0,13,0" />
+    <Setter Property="Margin" Value="3,0,1,0" />
+    <Setter Property="Foreground" Value="White" />
+    <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border x:Name="Chrome" Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentHover}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentPressed}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- Cancel: quiet until pointed at, then clearly destructive. -->
+  <Style x:Key="BarCloseButton" TargetType="Button" BasedOn="{StaticResource BarButton}">
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border x:Name="Chrome" Background="{TemplateBinding Background}" CornerRadius="8" SnapsToDevicePixels="True">
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Chrome" Property="Background" Value="{StaticResource DangerBrush}" />
+              <Setter Property="Foreground" Value="White" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="Chrome" Property="Opacity" Value="0.85" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -77,19 +142,21 @@
   </Style>
 
   <Style x:Key="BarToggle" TargetType="ToggleButton">
-    <Setter Property="Width" Value="32" />
-    <Setter Property="Height" Value="32" />
-    <Setter Property="Margin" Value="1" />
+    <Setter Property="Width" Value="34" />
+    <Setter Property="Height" Value="34" />
+    <Setter Property="Margin" Value="1,0" />
     <Setter Property="Foreground" Value="{StaticResource BarForeground}" />
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="Focusable" Value="False" />
     <Setter Property="Cursor" Value="Arrow" />
-    <Setter Property="ToolTipService.InitialShowDelay" Value="350" />
+    <Setter Property="ToolTipService.InitialShowDelay" Value="400" />
+    <Setter Property="ToolTipService.BetweenShowDelay" Value="80" />
     <Setter Property="ToolTipService.Placement" Value="Bottom" />
+    <Setter Property="ToolTipService.VerticalOffset" Value="6" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ToggleButton">
-          <Border x:Name="Chrome" Background="{TemplateBinding Background}" CornerRadius="5" SnapsToDevicePixels="True">
+          <Border x:Name="Chrome" Background="{TemplateBinding Background}" CornerRadius="8" SnapsToDevicePixels="True">
             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Border>
           <ControlTemplate.Triggers>
@@ -100,8 +167,15 @@
               <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentBrush}" />
               <Setter Property="Foreground" Value="White" />
             </Trigger>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="IsChecked" Value="True" />
+                <Condition Property="IsMouseOver" Value="True" />
+              </MultiTrigger.Conditions>
+              <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentHover}" />
+            </MultiTrigger>
             <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Opacity" Value="0.35" />
+              <Setter Property="Opacity" Value="0.3" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -110,16 +184,16 @@
   </Style>
 
   <Style x:Key="SwatchButton" TargetType="Button">
-    <Setter Property="Width" Value="22" />
-    <Setter Property="Height" Value="22" />
+    <Setter Property="Width" Value="24" />
+    <Setter Property="Height" Value="24" />
     <Setter Property="Margin" Value="2" />
     <Setter Property="Focusable" Value="False" />
     <Setter Property="Cursor" Value="Hand" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="Button">
-          <Border x:Name="Ring" BorderThickness="2" BorderBrush="Transparent" CornerRadius="12" Padding="1">
-            <Border Background="{TemplateBinding Background}" CornerRadius="10" BorderBrush="#66FFFFFF" BorderThickness="1" />
+          <Border x:Name="Ring" BorderThickness="2" BorderBrush="Transparent" CornerRadius="12" Padding="2">
+            <Border Background="{TemplateBinding Background}" CornerRadius="9" BorderBrush="#40FFFFFF" BorderThickness="1" />
           </Border>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
@@ -135,5 +209,113 @@
     <Setter Property="Foreground" Value="{StaticResource BarForeground}" />
     <Setter Property="FontSize" Value="12" />
     <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+
+  <!-- A keyboard shortcut shown as a key cap in tooltips. -->
+  <Style x:Key="KeyCap" TargetType="Border">
+    <Setter Property="Background" Value="{StaticResource KeyCapBackground}" />
+    <Setter Property="BorderBrush" Value="#29FFFFFF" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Padding" Value="5,0,5,1" />
+    <Setter Property="Margin" Value="8,0,0,0" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+
+  <Style x:Key="BarToolTip" TargetType="ToolTip">
+    <Setter Property="Foreground" Value="{StaticResource BarForeground}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="HasDropShadow" Value="True" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ToolTip">
+          <Border Background="#F70E0F12" BorderBrush="{StaticResource BarBorder}" BorderThickness="1" CornerRadius="7" Padding="9,5" Margin="0,0,6,6" SnapsToDevicePixels="True">
+            <Border.Effect>
+              <DropShadowEffect BlurRadius="12" ShadowDepth="3" Direction="270" Opacity="0.45" Color="Black" />
+            </Border.Effect>
+            <ContentPresenter TextElement.Foreground="{StaticResource BarForeground}" />
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- Dark menus for the "more" buttons, matching the bars instead of the white system menu. -->
+  <Style x:Key="BarContextMenu" TargetType="ContextMenu">
+    <Setter Property="HasDropShadow" Value="True" />
+    <Setter Property="Foreground" Value="{StaticResource BarForeground}" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="VerticalOffset" Value="6" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ContextMenu">
+          <Border Background="{StaticResource BarBackground}" BorderBrush="{StaticResource BarBorder}" BorderThickness="1" CornerRadius="10" Padding="4" Margin="0,0,14,14" MinWidth="200" SnapsToDevicePixels="True">
+            <Border.Effect>
+              <DropShadowEffect BlurRadius="20" ShadowDepth="5" Direction="270" Opacity="0.5" Color="Black" />
+            </Border.Effect>
+            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <Style.Resources>
+      <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator">
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="Separator">
+              <Rectangle Height="1" Margin="8,4" Fill="{StaticResource BarSeparator}" />
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+      <Style TargetType="MenuItem">
+        <Setter Property="Foreground" Value="{StaticResource BarForeground}" />
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="MenuItem">
+              <Border x:Name="Row" Background="Transparent" CornerRadius="6" Padding="8,6,8,6" SnapsToDevicePixels="True">
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="26" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="16" />
+                  </Grid.ColumnDefinitions>
+                  <ContentPresenter x:Name="IconHost" ContentSource="Icon" HorizontalAlignment="Left" VerticalAlignment="Center" MaxWidth="18" MaxHeight="18" />
+                  <Path x:Name="Check" Visibility="Collapsed" Data="M1,6 L5,10 L13,2" Stroke="{StaticResource AccentHover}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" VerticalAlignment="Center" />
+                  <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="2" Text="{TemplateBinding InputGestureText}" Foreground="{StaticResource BarMuted}" FontSize="12" Margin="24,0,0,0" VerticalAlignment="Center" />
+                  <Path x:Name="Arrow" Grid.Column="3" Visibility="Collapsed" Data="M0,0 L4,4 L0,8" Stroke="{StaticResource BarMuted}" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                  <Popup x:Name="PART_Popup" Placement="Right" HorizontalOffset="6" VerticalOffset="-6" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade"
+                         IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}">
+                    <Border Background="{StaticResource BarBackground}" BorderBrush="{StaticResource BarBorder}" BorderThickness="1" CornerRadius="10" Padding="4" Margin="0,0,14,14" MinWidth="180">
+                      <Border.Effect>
+                        <DropShadowEffect BlurRadius="20" ShadowDepth="5" Direction="270" Opacity="0.5" Color="Black" />
+                      </Border.Effect>
+                      <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                    </Border>
+                  </Popup>
+                </Grid>
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsHighlighted" Value="True">
+                  <Setter TargetName="Row" Property="Background" Value="{StaticResource BarHover}" />
+                </Trigger>
+                <Trigger Property="Role" Value="SubmenuHeader">
+                  <Setter TargetName="Arrow" Property="Visibility" Value="Visible" />
+                </Trigger>
+                <Trigger Property="IsChecked" Value="True">
+                  <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+                  <Setter TargetName="IconHost" Property="Visibility" Value="Collapsed" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                  <Setter Property="Opacity" Value="0.4" />
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+    </Style.Resources>
   </Style>
 </ResourceDictionary>

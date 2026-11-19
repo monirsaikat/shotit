@@ -16,7 +16,7 @@ namespace ShotIt.App.Editing;
 /// The drawing toolbar: tool buttons, colour, size, a per-tool style toggle, undo and redo.
 /// Used on the capture overlay and in the editor window; everything it does goes through the session.
 /// </summary>
-public sealed class ToolPalette : Border
+public sealed partial class ToolPalette : Border
 {
     private static readonly (ToolKind Tool, string Icon, string Tip)[] PrimaryTools =
     [
@@ -95,7 +95,7 @@ public sealed class ToolPalette : Border
         panel.Children.Add(_moreButton);
         panel.Children.Add(Separator());
 
-        _colorDot = new Ellipse { Width = 16, Height = 16, Stroke = new SolidColorBrush(Color.FromArgb(0x99, 255, 255, 255)), StrokeThickness = 1 };
+        _colorDot = new Ellipse { Width = 18, Height = 18, Stroke = Brushes.White, StrokeThickness = 2 };
         _colorButton = MakeButton(_colorDot, "Colour");
         _colorButton.Click += (_, _) => ShowColorPopup();
         panel.Children.Add(_colorButton);
@@ -146,15 +146,50 @@ public sealed class ToolPalette : Border
     {
         Style = (Style)Application.Current.FindResource("BarToggle"),
         Content = Icons.Create(icon, thickDots),
-        ToolTip = tip,
+        ToolTip = Tip(tip),
     };
 
-    public static Button MakeButton(object content, string tip) => new()
+    public static Button MakeButton(object content, string tip, string style = "BarButton") => new()
     {
-        Style = (Style)Application.Current.FindResource("BarButton"),
+        Style = (Style)Application.Current.FindResource(style),
         Content = content,
-        ToolTip = tip,
+        ToolTip = Tip(tip),
     };
+
+    /// <summary>A dark tooltip. A shortcut written as "Name (Ctrl+K)" is shown as a key cap after the name.</summary>
+    public static ToolTip Tip(string text)
+    {
+        var tip = new ToolTip { Style = (Style)Application.Current.FindResource("BarToolTip") };
+        var match = ShortcutPattern().Match(text ?? string.Empty);
+        if (!match.Success)
+        {
+            tip.Content = text;
+            return tip;
+        }
+
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(new TextBlock { Text = match.Groups["name"].Value, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(new Border
+        {
+            Style = (Style)Application.Current.FindResource("KeyCap"),
+            Child = new TextBlock { Text = match.Groups["key"].Value, FontSize = 11, Foreground = (Brush)Application.Current.FindResource("BarMuted") },
+        });
+        string rest = match.Groups["rest"].Value.TrimStart('.', ' ');
+        if (rest.Length == 0)
+        {
+            tip.Content = row;
+            return tip;
+        }
+
+        var stack = new StackPanel();
+        stack.Children.Add(row);
+        stack.Children.Add(new TextBlock { Text = rest, Foreground = (Brush)Application.Current.FindResource("BarMuted"), Margin = new Thickness(0, 3, 0, 0), MaxWidth = 260, TextWrapping = TextWrapping.Wrap });
+        tip.Content = stack;
+        return tip;
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^(?<name>.+?) \((?<key>(?:(?:Ctrl|Shift|Alt)\+)*(?:[A-Z0-9]|Esc|Enter|Delete|F\d{1,2}))\)(?<rest>.*)$")]
+    private static partial System.Text.RegularExpressions.Regex ShortcutPattern();
 
     public static Rectangle Separator() => new() { Style = (Style)Application.Current.FindResource("BarSeparatorStyle") };
 
@@ -170,7 +205,7 @@ public sealed class ToolPalette : Border
             foreach (var (tool, button) in _toolButtons) button.IsChecked = _session.Tool == tool;
             _moreButton.IsChecked = !_toolButtons.ContainsKey(_session.Tool);
             var more = MoreTools.FirstOrDefault(m => m.Tool == _session.Tool);
-            _moreButton.ToolTip = more.Name is null ? "More tools" : "More tools · " + more.Name;
+            _moreButton.ToolTip = Tip(more.Name is null ? "More tools" : "More tools · " + more.Name);
 
             var options = _session.Options;
             _colorDot.Fill = (UsesHighlightColor ? options.HighlightColor : options.Color).ToBrush();
@@ -185,7 +220,7 @@ public sealed class ToolPalette : Border
             if (style is { } s)
             {
                 _styleToggle.Content = Icons.Create(s.Icon);
-                _styleToggle.ToolTip = s.Tip;
+                _styleToggle.ToolTip = Tip(s.Tip);
                 _styleToggle.IsChecked = s.Value;
             }
 
@@ -194,7 +229,7 @@ public sealed class ToolPalette : Border
             if (style2 is { } s2)
             {
                 _styleToggle2.Content = Icons.Create(s2.Icon);
-                _styleToggle2.ToolTip = s2.Tip;
+                _styleToggle2.ToolTip = Tip(s2.Tip);
                 _styleToggle2.IsChecked = s2.Value;
             }
 
@@ -298,7 +333,7 @@ public sealed class ToolPalette : Border
     private void ShowMoreMenu(bool includeCrop)
     {
         Refresh(); // undo the automatic toggle; the checked state reflects the active tool
-        var menu = new ContextMenu { PlacementTarget = _moreButton, Placement = PlacementMode.Bottom };
+        var menu = new ContextMenu { Style = (Style)Application.Current.FindResource("BarContextMenu"), PlacementTarget = _moreButton, Placement = PlacementMode.Bottom };
         foreach (var (tool, icon, name, key) in MoreTools)
         {
             if (tool == ToolKind.Sticker)

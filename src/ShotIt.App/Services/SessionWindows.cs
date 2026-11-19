@@ -40,7 +40,7 @@ internal sealed class AreaOutlineWindow : Window
 /// </summary>
 internal sealed class SessionPanelWindow : Window
 {
-    private const int ShadowMargin = 12;
+    private const int ShadowMargin = 16;
     private readonly TextBlock _status;
 
     /// <param name="avoid">A point the panel must not cover when it has to sit inside the area.</param>
@@ -69,7 +69,7 @@ internal sealed class SessionPanelWindow : Window
         row.Children.Add(ToolPalette.Separator());
         row.Children.Add(done);
         row.Children.Add(close);
-        Content = new Border { Style = (Style)Application.Current.FindResource("BarPanel"), Margin = new Thickness(ShadowMargin), Child = row };
+        Content = new Border { Style = (Style)Application.Current.FindResource("BarPanel"), Margin = new Thickness(ShadowMargin, ShadowMargin - 4, ShadowMargin, ShadowMargin + 8), Child = row };
 
         bool hidden = false;
         SourceInitialized += (_, _) =>

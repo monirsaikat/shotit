@@ -481,7 +481,7 @@ public sealed class EditorWindow : Window
 
     private void ShowCropMenu(UIElement target)
     {
-        var menu = new ContextMenu { PlacementTarget = target, Placement = PlacementMode.Bottom };
+        var menu = new ContextMenu { Style = (Style)FindResource("BarContextMenu"), PlacementTarget = target, Placement = PlacementMode.Bottom };
         foreach (var (name, aspect) in new (string, double?)[] { ("Free", null), ("Square 1:1", 1), ("4:3", 4.0 / 3), ("3:2", 1.5), ("16:9", 16.0 / 9), ("9:16 (portrait)", 9.0 / 16) })
         {
             var item = new MenuItem { Header = "Crop: " + name, IsChecked = _session.Tool == ToolKind.Crop && _session.CropAspect == aspect };
@@ -498,7 +498,7 @@ public sealed class EditorWindow : Window
 
     private void ShowImageMenu(UIElement target)
     {
-        var menu = new ContextMenu { PlacementTarget = target, Placement = PlacementMode.Bottom };
+        var menu = new ContextMenu { Style = (Style)FindResource("BarContextMenu"), PlacementTarget = target, Placement = PlacementMode.Bottom };
         void Add(string header, Action action)
         {
             var item = new MenuItem { Header = header };

@@ -361,7 +361,6 @@ public sealed class ActionBar : Border
             panel.Children.Add(button);
         }
 
-        Add(Icons.Copy, "Copy to clipboard (Ctrl+C)", OverlayAction.Copy);
         Add(Icons.Save, "Save (Ctrl+S)", OverlayAction.Save);
         Add(Icons.SaveAs, "Save as… (Ctrl+Shift+S)", OverlayAction.SaveAs);
         Add(Icons.Upload, "Upload and copy link (Ctrl+U)", OverlayAction.Upload);
@@ -372,7 +371,7 @@ public sealed class ActionBar : Border
         var more = ToolPalette.MakeButton(Icons.Create(Icons.More, thickDots: true), "More actions");
         more.Click += (_, _) =>
         {
-            var menu = new ContextMenu { PlacementTarget = more, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+            var menu = new ContextMenu { Style = (Style)Application.Current.FindResource("BarContextMenu"), PlacementTarget = more, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
             void Item(string header, OverlayAction action, string? gesture = null)
             {
                 var item = new MenuItem { Header = header, InputGestureText = gesture ?? string.Empty };
@@ -397,7 +396,20 @@ public sealed class ActionBar : Border
         };
         panel.Children.Add(more);
         panel.Children.Add(ToolPalette.Separator());
-        Add(Icons.Close, "Cancel (Esc)", OverlayAction.Cancel);
+
+        // Copy is what most captures end with, so it is the one labelled, filled button.
+        var copyContent = new StackPanel { Orientation = Orientation.Horizontal };
+        var copyIcon = Icons.Create(Icons.Copy);
+        copyIcon.Stroke = Brushes.White;
+        copyContent.Children.Add(copyIcon);
+        copyContent.Children.Add(new TextBlock { Text = "Copy", Margin = new Thickness(7, 0, 0, 1), VerticalAlignment = VerticalAlignment.Center });
+        var copy = ToolPalette.MakeButton(copyContent, "Copy to clipboard (Ctrl+C)", "BarPrimaryButton");
+        copy.Click += (_, _) => invoke(OverlayAction.Copy);
+        panel.Children.Add(copy);
+
+        var close = ToolPalette.MakeButton(Icons.Create(Icons.Close), "Cancel (Esc)", "BarCloseButton");
+        close.Click += (_, _) => invoke(OverlayAction.Cancel);
+        panel.Children.Add(close);
         Child = panel;
     }
 }

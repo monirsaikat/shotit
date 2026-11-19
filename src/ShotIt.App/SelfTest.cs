@@ -409,6 +409,55 @@ internal static partial class SelfTest
         await Settle(500);
         SaveWindowPicture(picker, Path.Combine(output, "emoji-picker.png"));
         picker.Close();
+
+        // The capture toolbars as they appear under a selection, over a light page.
+        var bars = new System.Windows.Controls.StackPanel { Margin = new Thickness(40, 30, 40, 40), HorizontalAlignment = HorizontalAlignment.Right };
+        var toolSession = new EditorSession(DocState.FromImage(new PixelBuffer(100, 100)));
+        toolSession.SetTool(ToolKind.Arrow);
+        bars.Children.Add(new ShotIt.App.Editing.ToolPalette(toolSession) { HorizontalAlignment = HorizontalAlignment.Right });
+        bars.Children.Add(new ShotIt.App.Overlay.ActionBar(_ => { }, onScreen: true) { HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 8, 0, 0) });
+        var toolbarWindow = new Window
+        {
+            Title = "Toolbar",
+            Topmost = true,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            ResizeMode = ResizeMode.NoResize,
+            Background = new LinearGradientBrush(Color.FromRgb(0xEE, 0xF1, 0xF6), Color.FromRgb(0xC9, 0xD3, 0xE3), 90),
+            Content = bars,
+        };
+        toolbarWindow.Show();
+        await Settle(500);
+        SaveWindowPicture(toolbarWindow, Path.Combine(output, "toolbar.png"));
+
+        // The dark menu, with a ticked item, a shortcut and a submenu. It is photographed from the screen
+        // only while the toolbar window is in front, so nothing else on the desktop is saved.
+        var menu = new System.Windows.Controls.ContextMenu
+        {
+            Style = (Style)Application.Current.FindResource("BarContextMenu"),
+            PlacementTarget = bars,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Relative,
+            HorizontalOffset = 40,
+            VerticalOffset = 20,
+        };
+        menu.Items.Add(new System.Windows.Controls.MenuItem { Header = "Scrolling capture of this area" });
+        menu.Items.Add(new System.Windows.Controls.MenuItem { Header = "Highlight area", IsChecked = true, InputGestureText = "G" });
+        var sub = new System.Windows.Controls.MenuItem { Header = "Sticker", InputGestureText = "K" };
+        sub.Items.Add(new System.Windows.Controls.MenuItem { Header = "Check" });
+        menu.Items.Add(sub);
+        menu.Items.Add(new System.Windows.Controls.Separator());
+        menu.Items.Add(new System.Windows.Controls.MenuItem { Header = "Print…", InputGestureText = "Ctrl+P" });
+        toolbarWindow.Height = 420;
+        toolbarWindow.SizeToContent = SizeToContent.Width;
+        await Settle(200);
+        menu.IsOpen = true;
+        sub.IsSubmenuOpen = true;
+        await Settle(600);
+        report.Check(menu.IsOpen, "The dark menu did not open");
+        // The window is kept above everything else, so the photo shows only it and its menu.
+        nint toolbarHandle = new System.Windows.Interop.WindowInteropHelper(toolbarWindow).Handle;
+        SavePng(GdiScreen.Capture(WindowList.GetBounds(toolbarHandle)), Path.Combine(output, "toolbar-menu.png"));
+        menu.IsOpen = false;
+        toolbarWindow.Close();
         session.SetTool(ToolKind.Select);
         session.SelectAll();
         session.NudgeSelected(new Vec2(5, 5));
